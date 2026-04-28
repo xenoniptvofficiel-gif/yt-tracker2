@@ -1,0 +1,2332 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>XENONTV YTB</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0a0a; --surface: #111111; --surface2: #1a1a1a;
+    --border: #2a2a2a; --accent: #ff3d00; --accent2: #ff6d3d;
+    --text: #f0f0f0; --text-dim: #888; --text-muted: #444;
+    --success: #00e676; --warning: #ffea00; --error: #ff1744; --red-yt: #ff0000;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background:var(--bg); color:var(--text); font-family:'DM Mono',monospace; min-height:100vh; overflow-x:hidden; }
+  body::before {
+    content:''; position:fixed; inset:0;
+    background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
+    pointer-events:none; z-index:9999; opacity:0.4;
+  }
+
+  /* HEADER */
+  header {
+    border-bottom:1px solid var(--border); padding:14px 36px;
+    display:flex; align-items:center; justify-content:space-between;
+    position:sticky; top:0; background:rgba(10,10,10,0.97);
+    backdrop-filter:blur(10px); z-index:100; gap:16px; flex-wrap:wrap;
+  }
+  .logo { font-family:'Syne',sans-serif; font-weight:800; font-size:1.2rem; letter-spacing:-0.02em; display:flex; align-items:center; gap:10px; flex-shrink:0; }
+  .logo-icon { width:26px; height:18px; background:var(--red-yt); border-radius:4px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+  .logo-icon::after { content:''; border-left:9px solid white; border-top:5px solid transparent; border-bottom:5px solid transparent; margin-left:2px; }
+  .header-stats { display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end; }
+  .hdr-stat { background:var(--surface); border:1px solid var(--border); border-radius:3px; padding:6px 12px; display:flex; flex-direction:column; align-items:flex-end; gap:2px; min-width:88px; }
+  .hdr-stat-label { font-size:0.58rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.08em; }
+  .hdr-stat-value { font-family:'DM Mono',monospace; font-weight:500; font-size:0.88rem; color:#ffffff; }
+  .hdr-stat-value.c-online { color:var(--success); }
+  .hdr-stat-value.c-deleted { color:var(--error); }
+  .hdr-stat-value.c-today { color:var(--warning); }
+
+  /* TABS */
+  .tabs { display:flex; border-bottom:1px solid var(--border); padding:0 36px; }
+  .tab { padding:13px 22px; font-family:'Syne',sans-serif; font-size:0.77rem; font-weight:600; letter-spacing:0.08em; text-transform:uppercase; color:var(--text-muted); cursor:pointer; border-bottom:2px solid transparent; transition:all 0.2s; background:none; border-left:none; border-right:none; border-top:none; }
+  .tab:hover { color:var(--text-dim); }
+  .tab.active { color:var(--accent); border-bottom-color:var(--accent); }
+
+  /* CONTENT */
+  .content { padding:32px 36px; max-width:1280px; margin:0 auto; }
+  .panel { display:none; }
+  .panel.active { display:block; }
+
+  /* ADD */
+  .add-section { background:var(--surface); border:1px solid var(--border); border-radius:4px; padding:22px 26px; margin-bottom:24px; position:relative; overflow:hidden; }
+  .add-section::before { content:''; position:absolute; top:0; left:0; right:0; height:2px; background:linear-gradient(90deg,var(--accent),transparent); }
+  .section-title { font-family:'Syne',sans-serif; font-weight:700; font-size:0.67rem; letter-spacing:0.15em; text-transform:uppercase; color:var(--text-dim); margin-bottom:13px; }
+  .input-row { display:flex; gap:10px; }
+  .url-input { flex:1; background:var(--bg); border:1px solid var(--border); color:var(--text); padding:11px 15px; font-family:'DM Mono',monospace; font-size:0.84rem; border-radius:3px; outline:none; transition:border-color 0.2s; }
+  .url-input:focus { border-color:var(--accent); }
+  .url-input::placeholder { color:var(--text-muted); }
+
+  .btn { background:var(--accent); color:white; border:none; padding:10px 20px; font-family:'Syne',sans-serif; font-weight:700; font-size:0.74rem; letter-spacing:0.1em; text-transform:uppercase; cursor:pointer; border-radius:3px; transition:all 0.2s; white-space:nowrap; }
+  .btn:hover { background:var(--accent2); transform:translateY(-1px); }
+  .btn:active { transform:translateY(0); }
+  .btn:disabled { opacity:0.4; cursor:not-allowed; transform:none; }
+  .btn-ghost { background:transparent; border:1px solid var(--border); color:var(--text-dim); }
+  .btn-ghost:hover { border-color:var(--text-dim); background:transparent; color:var(--text); }
+  .btn-sm { padding:6px 13px; font-size:0.68rem; }
+
+  /* TOAST */
+  #toast { position:fixed; bottom:26px; right:26px; padding:11px 18px; border-radius:3px; font-size:0.78rem; font-family:'DM Mono',monospace; z-index:9998; transform:translateY(20px); opacity:0; transition:all 0.3s; max-width:360px; }
+  #toast.show { transform:translateY(0); opacity:1; }
+  #toast.success { background:var(--success); color:#000; }
+  #toast.error { background:var(--error); color:#fff; }
+  #toast.warning { background:var(--warning); color:#000; }
+
+  /* ─── CONTROLS BAR ─── */
+  .controls-bar {
+    background:var(--surface); border:1px solid var(--border); border-radius:4px;
+    padding:16px 20px; margin-bottom:16px;
+    display:flex; flex-wrap:wrap; gap:14px; align-items:flex-end;
+  }
+  .ctrl-group { display:flex; flex-direction:column; gap:5px; }
+  .ctrl-label { font-size:0.6rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.1em; }
+  .ctrl-btns { display:flex; gap:4px; flex-wrap:wrap; }
+
+  .sort-btn, .period-btn {
+    background:var(--surface2); border:1px solid var(--border); color:var(--text-dim);
+    padding:5px 11px; font-family:'DM Mono',monospace; font-size:0.72rem;
+    border-radius:3px; cursor:pointer; transition:all 0.15s; white-space:nowrap;
+  }
+  .sort-btn:hover, .period-btn:hover { border-color:var(--text-dim); color:var(--text); }
+  .sort-btn.active { background:var(--accent); border-color:var(--accent); color:white; }
+  .period-btn.active { background:var(--accent); border-color:var(--accent); color:white; }
+
+  /* DATE TABLE PICKER */
+  .date-picker-wrap { position:relative; }
+  .date-picker-btn {
+    background:var(--surface2); border:1px solid var(--border); color:var(--text-dim);
+    padding:5px 11px; font-family:'DM Mono',monospace; font-size:0.72rem;
+    border-radius:3px; cursor:pointer; transition:all 0.15s; display:flex; align-items:center; gap:6px;
+  }
+  .date-picker-btn:hover { border-color:var(--text-dim); color:var(--text); }
+  .date-picker-btn.active { background:var(--accent); border-color:var(--accent); color:white; }
+
+  .date-table-dropdown {
+    position:absolute; top:calc(100% + 6px); left:0; z-index:200;
+    background:var(--surface); border:1px solid var(--border); border-radius:4px;
+    padding:12px; min-width:320px;
+    box-shadow:0 8px 32px rgba(0,0,0,0.6);
+    display:none;
+  }
+  .date-table-dropdown.open { display:block; }
+
+  .date-table-header { font-family:'Syne',sans-serif; font-weight:700; font-size:0.65rem; letter-spacing:0.12em; text-transform:uppercase; color:var(--text-dim); margin-bottom:10px; display:flex; justify-content:space-between; align-items:center; }
+  .date-table-close { cursor:pointer; color:var(--text-muted); font-size:1rem; line-height:1; }
+  .date-table-close:hover { color:var(--text); }
+
+  .date-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:4px; max-height:240px; overflow-y:auto; }
+  .date-cell {
+    background:var(--surface2); border:1px solid var(--border); color:var(--text-dim);
+    padding:6px 4px; font-size:0.68rem; border-radius:2px; cursor:pointer;
+    text-align:center; transition:all 0.12s;
+  }
+  .date-cell:hover { border-color:var(--accent); color:var(--text); }
+  .date-cell.selected { background:var(--accent); border-color:var(--accent); color:white; }
+  .date-cell.today-cell { border-color:var(--warning); color:var(--warning); }
+  .date-cell.today-cell.selected { background:var(--accent); border-color:var(--accent); color:white; }
+
+  /* VIDEOS HEADER */
+  .videos-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; flex-wrap:wrap; gap:10px; }
+  .count-badge { background:var(--surface2); border:1px solid var(--border); padding:3px 10px; border-radius:2px; font-size:0.7rem; color:var(--text-dim); }
+  .search-input { background:var(--surface); border:1px solid var(--border); color:var(--text); padding:7px 13px; font-family:'DM Mono',monospace; font-size:0.77rem; border-radius:3px; outline:none; width:200px; transition:border-color 0.2s; }
+  .search-input:focus { border-color:var(--accent); }
+  .search-input::placeholder { color:var(--text-muted); }
+
+  /* VIDEO LIST */
+  .video-list { display:flex; flex-direction:column; gap:1px; background:var(--border); border:1px solid var(--border); border-radius:4px; overflow:hidden; }
+
+  .video-item {
+    background:var(--surface);
+    display:grid; grid-template-columns:36px 120px 1fr auto 140px auto;
+    align-items:center; gap:14px; padding:11px 16px;
+    transition:background 0.15s; position:relative;
+  }
+  .video-item:hover { background:var(--surface2); }
+  .video-item.is-deleted { border:2px solid var(--error) !important; background:rgba(255,23,68,0.04) !important; }
+  .video-item.is-deleted:hover { background:rgba(255,23,68,0.07) !important; }
+
+  /* STATUS */
+  .status-col { display:flex; flex-direction:column; align-items:center; gap:5px; flex-shrink:0; }
+  .status-dot { width:10px; height:10px; border-radius:50%; flex-shrink:0; }
+  .status-dot.online { background:var(--success); box-shadow:0 0 6px var(--success); }
+  .status-dot.deleted { background:var(--error); box-shadow:0 0 6px var(--error); }
+  .status-text { font-family:'Syne',sans-serif; font-weight:700; font-size:0.5rem; letter-spacing:0.1em; text-transform:uppercase; writing-mode:vertical-rl; text-orientation:mixed; transform:rotate(180deg); }
+  .status-text.online { color:var(--success); }
+  .status-text.deleted { color:var(--error); }
+
+  /* THUMB */
+  .video-thumb { width:120px; height:68px; object-fit:cover; border-radius:2px; background:var(--bg); display:block; flex-shrink:0; }
+  .video-thumb.faded { filter:grayscale(70%) opacity(0.45); }
+  .video-thumb-placeholder { width:120px; height:68px; background:var(--surface2); border-radius:2px; display:flex; align-items:center; justify-content:center; color:var(--text-muted); font-size:0.65rem; flex-shrink:0; }
+
+  /* INFO */
+  .video-info { min-width:0; }
+  .video-title { font-family:'Syne',sans-serif; font-weight:600; font-size:0.82rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin-bottom:4px; }
+  .video-title.faded { color:var(--text-dim); text-decoration:line-through; }
+  .video-url { font-size:0.67rem; color:var(--text-muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+
+  /* DATES COLUMN */
+  .video-dates { font-size:0.67rem; color:var(--text-muted); text-align:right; flex-shrink:0; line-height:1.8; }
+  .video-dates .date-row { display:flex; flex-direction:column; gap:2px; }
+  .video-dates .date-item { display:flex; align-items:center; gap:5px; justify-content:flex-end; }
+  .date-icon { font-size:0.6rem; opacity:0.6; }
+
+  /* VIEWS */
+  .view-count { text-align:right; flex-shrink:0; }
+  .view-number { font-family:'Syne',sans-serif; font-weight:700; font-size:0.93rem; }
+  .view-label { font-size:0.6rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.05em; }
+  .view-delta { font-size:0.68rem; margin-top:2px; }
+  .view-delta.pos { color:var(--success); }
+  .view-delta.zero { color:var(--text-muted); }
+
+  .video-actions { display:flex; gap:5px; flex-shrink:0; }
+  .btn-icon { background:transparent; border:1px solid var(--border); color:var(--text-dim); width:30px; height:30px; border-radius:3px; cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:0.74rem; transition:all 0.15s; }
+  .btn-icon:hover { border-color:var(--error); color:var(--error); }
+
+  /* STATS PANEL */
+  .stats-top { display:grid; grid-template-columns:repeat(3,1fr); gap:13px; margin-bottom:28px; }
+  .stat-card { background:var(--surface); border:1px solid var(--border); border-radius:4px; padding:20px; position:relative; overflow:hidden; }
+  .stat-card::after { content:''; position:absolute; bottom:0; left:0; right:0; height:1px; background:linear-gradient(90deg,var(--accent),transparent); }
+  .stat-value { font-family:'DM Mono',monospace; font-weight:500; font-size:1.7rem; line-height:1; margin-bottom:6px; letter-spacing:-0.02em; color:#ffffff; }
+  .stat-label { font-size:0.67rem; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.1em; }
+
+  .history-nav { display:flex; gap:7px; margin-bottom:18px; flex-wrap:wrap; }
+  .day-btn { background:var(--surface); border:1px solid var(--border); color:var(--text-dim); padding:6px 13px; font-family:'DM Mono',monospace; font-size:0.71rem; border-radius:3px; cursor:pointer; transition:all 0.15s; }
+  .day-btn:hover { border-color:var(--text-dim); color:var(--text); }
+  .day-btn.active { background:var(--accent); border-color:var(--accent); color:white; }
+
+  .summary-table { width:100%; border-collapse:collapse; font-size:0.79rem; }
+  .summary-table th { text-align:left; padding:9px 13px; font-family:'Syne',sans-serif; font-size:0.61rem; letter-spacing:0.1em; text-transform:uppercase; color:var(--text-muted); border-bottom:1px solid var(--border); }
+  .summary-table td { padding:11px 13px; border-bottom:1px solid var(--border); vertical-align:middle; }
+  .summary-table tr:last-child td { border-bottom:none; }
+  .summary-table tr:hover td { background:var(--surface2); }
+  .delta-pos { color:var(--success); font-weight:500; }
+  .delta-zero { color:var(--text-muted); }
+  .delta-neg { color:var(--error); }
+
+  .loading { display:flex; align-items:center; gap:10px; color:var(--text-dim); font-size:0.8rem; padding:40px; justify-content:center; }
+  .spinner { width:15px; height:15px; border:2px solid var(--border); border-top-color:var(--accent); border-radius:50%; animation:spin 0.7s linear infinite; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+  .empty-state { text-align:center; padding:50px 20px; color:var(--text-muted); font-size:0.82rem; }
+  .empty-state .big { font-size:2.5rem; margin-bottom:10px; }
+
+  .daily-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; }
+  .date-label { font-family:'Syne',sans-serif; font-weight:700; font-size:1rem; }
+
+  /* PERIOD INDICATOR */
+  .period-indicator {
+    display:inline-flex; align-items:center; gap:6px;
+    background:var(--surface2); border:1px solid var(--accent);
+    border-radius:3px; padding:4px 10px; font-size:0.7rem; color:var(--accent);
+    font-family:'Syne',sans-serif; font-weight:600;
+  }
+
+  /* ── TABLET ── */
+  @media (max-width:900px) {
+    header { padding:12px 18px; flex-wrap:wrap; }
+    .content { padding:16px; }
+    .tabs { padding:0 12px; overflow-x:auto; scrollbar-width:none; white-space:nowrap; }
+    .tabs::-webkit-scrollbar { display:none; }
+    .tab { padding:11px 14px; font-size:0.72rem; flex-shrink:0; }
+    .video-item { grid-template-columns:28px 80px 1fr auto; }
+    .video-dates { display:none; }
+    .stats-top { grid-template-columns:1fr 1fr; }
+    #panel-analytics .stats-top { grid-template-columns:1fr 1fr; }
+  }
+
+  /* ── MOBILE ── */
+  @media (max-width:600px) {
+    /* Header */
+    header { padding:10px 14px; gap:8px; }
+    .logo { font-size:1rem; }
+    .header-stats { gap:4px; width:100%; justify-content:flex-start; }
+    .hdr-stat { min-width:0; flex:1; padding:5px 6px; }
+    .hdr-stat-label { font-size:0.52rem; }
+    .hdr-stat-value { font-size:0.78rem; }
+
+    /* Tabs — scrollable horizontally */
+    .tabs { padding:0 8px; gap:0; }
+    .tab { padding:10px 12px; font-size:0.68rem; letter-spacing:0.04em; }
+
+    /* Content */
+    .content { padding:12px; }
+
+    /* Add section */
+    .add-section { padding:14px; }
+    .input-row { flex-direction:column; gap:8px; }
+    .url-input { width:100%; }
+    .btn { width:100%; justify-content:center; text-align:center; }
+    #addBtn { width:100%; }
+
+    /* Controls bar */
+    .controls-bar { padding:12px; gap:10px; }
+    .ctrl-btns { flex-wrap:wrap; gap:4px; }
+    .sort-btn, .period-btn { font-size:0.68rem; padding:5px 9px; }
+    .search-input { width:100% !important; }
+
+    /* Video items — mobile layout */
+    .video-item {
+      grid-template-columns:24px 1fr auto !important;
+      grid-template-rows:auto auto;
+      gap:8px;
+      padding:10px 12px;
+    }
+    .video-thumb { width:100%; height:auto; aspect-ratio:16/9; grid-column:1/4; border-radius:3px; }
+    .video-thumb-placeholder { width:100%; height:60px; grid-column:1/4; }
+    .status-col { grid-row:1; grid-column:1; align-self:center; }
+    .video-info { grid-column:2; grid-row:1; min-width:0; }
+    .view-count { grid-column:3; grid-row:1; text-align:right; }
+    .video-dates { display:none; }
+    .video-actions { grid-column:3; grid-row:1; align-self:start; }
+    .video-title { font-size:0.78rem; }
+    .view-number { font-size:0.85rem; }
+
+    /* Pagination */
+    .pagination-bar { flex-direction:column; align-items:flex-start; gap:8px; }
+    .page-btn { width:28px; height:28px; font-size:0.7rem; }
+
+    /* Stats top */
+    .stats-top { grid-template-columns:1fr 1fr !important; gap:8px; }
+    .stat-value { font-size:1.4rem; }
+
+    /* Daily header */
+    .daily-header { flex-wrap:wrap; gap:8px; }
+
+    /* History nav */
+    .history-nav { gap:5px; }
+    .day-btn { font-size:0.65rem; padding:5px 9px; }
+
+    /* Summary table */
+    .summary-table { font-size:0.72rem; }
+    .summary-table th, .summary-table td { padding:8px 8px; }
+
+    /* Videos header */
+    .videos-header { flex-direction:column; align-items:flex-start; gap:8px; }
+    #main-refresh-btn { width:100%; justify-content:center; }
+
+    /* Status panel */
+    #panel-status .stats-top { grid-template-columns:1fr !important; }
+
+    /* Range calendar picker */
+    #range-picker-dropdown, #an-cal-dropdown { min-width:280px !important; left:0 !important; right:0 !important; }
+
+    /* Import modal */
+    #import-overlay > div { width:95vw !important; }
+
+    /* Delete modal */
+    #delete-overlay > div { width:92vw !important; }
+
+    /* Analytics */
+    #panel-analytics .stats-top { grid-template-columns:1fr 1fr !important; }
+  }
+
+  /* PAGINATION */
+  .pagination-bar {
+    display:flex; align-items:center; justify-content:space-between;
+    padding:14px 0; flex-wrap:wrap; gap:10px; margin-top:12px;
+  }
+  .pagination-info { font-size:0.72rem; color:var(--text-dim); }
+  .pagination-controls { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+  .page-btn {
+    background:var(--surface); border:1px solid var(--border); color:var(--text-dim);
+    width:32px; height:32px; border-radius:3px; cursor:pointer;
+    font-family:'DM Mono',monospace; font-size:0.75rem;
+    display:flex; align-items:center; justify-content:center; transition:all 0.15s;
+  }
+  .page-btn:hover { border-color:var(--text-dim); color:var(--text); }
+  .page-btn.active { background:var(--accent); border-color:var(--accent); color:white; }
+  .page-btn:disabled { opacity:0.3; cursor:not-allowed; }
+  .page-btn.wide { width:auto; padding:0 10px; }
+  .page-ellipsis { color:var(--text-muted); font-size:0.75rem; padding:0 4px; }
+  .perpage-select {
+    background:var(--surface2); border:1px solid var(--border); color:var(--text-dim);
+    padding:5px 10px; font-family:'DM Mono',monospace; font-size:0.72rem;
+    border-radius:3px; cursor:pointer; outline:none;
+  }
+  .perpage-select:focus { border-color:var(--accent); }
+
+</style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+</head>
+<body>
+
+<header>
+  <div class="logo"><div class="logo-icon"></div>XENONTV YTB</div>
+  <div class="header-stats">
+    <div class="hdr-stat"><div class="hdr-stat-label">Vues totales</div><div class="hdr-stat-value" id="hdr-views">—</div></div>
+    <div class="hdr-stat"><div class="hdr-stat-label">Vues aujourd'hui</div><div class="hdr-stat-value c-today" id="hdr-today">—</div></div>
+    <div class="hdr-stat"><div class="hdr-stat-label">En ligne</div><div class="hdr-stat-value c-online" id="hdr-online">—</div></div>
+    <div class="hdr-stat"><div class="hdr-stat-label">Supprimées</div><div class="hdr-stat-value c-deleted" id="hdr-deleted">—</div></div>
+    <div class="hdr-stat"><div class="hdr-stat-label">Màj</div><div class="hdr-stat-value" id="hdr-date">—</div></div>
+  </div>
+</header>
+
+<div class="tabs">
+  <button class="tab active" onclick="showTab('videos',this)">Vidéos</button>
+  <button class="tab" onclick="showTab('stats',this)">Bilans quotidiens</button>
+  <button class="tab" onclick="showTab('analytics',this)">Statistiques</button>
+  <button class="tab" onclick="showTab('status',this)" id="tab-status">État des vidéos <span id="status-badge" style="display:none;background:var(--error);color:white;font-size:0.55rem;padding:1px 6px;border-radius:10px;margin-left:4px;font-family:'DM Mono',monospace;"></span></button>
+</div>
+
+<div class="content">
+
+  <!-- VIDEOS PANEL -->
+  <div class="panel active" id="panel-videos">
+
+    <div class="add-section">
+      <div class="section-title">Ajouter une vidéo</div>
+      <div class="input-row">
+        <input class="url-input" id="urlInput" type="text" placeholder="https://www.youtube.com/watch?v=..." />
+        <button class="btn" id="addBtn" onclick="addVideo()">+ Ajouter</button>
+        <button class="btn btn-ghost" onclick="openImport()">⬆ Import en masse</button>
+      </div>
+    </div>
+
+    <!-- IMPORT MODAL OVERLAY -->
+    <div id="import-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:500;align-items:center;justify-content:center;">
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:6px;width:640px;max-width:95vw;max-height:90vh;overflow:hidden;display:flex;flex-direction:column;">
+        <div style="padding:20px 24px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0;position:relative;">
+          <div style="position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,var(--accent),transparent);border-radius:6px 6px 0 0;"></div>
+          <div>
+            <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:1rem;margin-bottom:3px;">Import en masse</div>
+            <div style="font-size:0.7rem;color:var(--text-muted);">Collez vos URLs YouTube — un par ligne, les doublons sont ignorés automatiquement</div>
+          </div>
+          <button onclick="closeImport()" style="background:transparent;border:1px solid var(--border);color:var(--text-dim);width:32px;height:32px;border-radius:3px;cursor:pointer;font-size:1rem;line-height:1;">✕</button>
+        </div>
+        <div id="import-input-area" style="padding:20px 24px;flex:1;display:flex;flex-direction:column;gap:12px;overflow:auto;">
+          <textarea id="importTextarea" oninput="parseImportUrls()" style="width:100%;height:200px;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:12px 14px;font-family:'DM Mono',monospace;font-size:0.78rem;border-radius:3px;outline:none;resize:vertical;line-height:1.6;" placeholder="https://www.youtube.com/watch?v=abc123&#10;https://youtu.be/def456&#10;https://www.youtube.com/watch?v=ghi789&#10;..."></textarea>
+          <div id="import-parse-info" style="font-size:0.72rem;color:var(--text-dim);min-height:18px;"></div>
+          <div style="display:flex;gap:8px;justify-content:flex-end;">
+            <button class="btn btn-ghost" onclick="closeImport()">Annuler</button>
+            <button class="btn" id="importStartBtn" onclick="startImport()" disabled style="opacity:0.4;">⬆ Lancer l'import</button>
+          </div>
+        </div>
+        <div id="import-progress-area" style="display:none;padding:20px 24px;flex:1;overflow:auto;flex-direction:column;gap:14px;">
+          <div>
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+              <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:0.82rem;" id="import-status-text">Import en cours...</div>
+              <div style="font-size:0.72rem;color:var(--text-dim);" id="import-count-text">0 / 0</div>
+            </div>
+            <div style="height:5px;background:var(--surface2);border-radius:3px;overflow:hidden;">
+              <div id="import-progress-bar" style="height:100%;width:0%;background:var(--accent);transition:width 0.25s;border-radius:3px;"></div>
+            </div>
+          </div>
+          <div id="import-log" style="font-size:0.71rem;line-height:2;max-height:300px;overflow-y:auto;font-family:'DM Mono',monospace;padding-right:4px;"></div>
+          <div style="display:flex;justify-content:flex-end;margin-top:8px;">
+            <button class="btn" id="importDoneBtn" style="display:none" onclick="finishImport()">✓ Terminé — Voir les vidéos</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- CONTROLS BAR -->
+    <div class="controls-bar">
+
+      <!-- TRI -->
+      <div class="ctrl-group">
+        <div class="ctrl-label">Trier par</div>
+        <div class="ctrl-btns" id="sort-btns">
+          <button class="sort-btn active" data-sort="views-desc" onclick="setSort('views-desc',this)">Vues ↓</button>
+          <button class="sort-btn" data-sort="views-asc" onclick="setSort('views-asc',this)">Vues ↑</button>
+          <button class="sort-btn" data-sort="date-desc" onclick="setSort('date-desc',this)">Date ajout ↓</button>
+          <button class="sort-btn" data-sort="date-asc" onclick="setSort('date-asc',this)">Date ajout ↑</button>
+          <button class="sort-btn" data-sort="publish-desc" onclick="setSort('publish-desc',this)">Publication ↓</button>
+          <button class="sort-btn" data-sort="period-desc" onclick="setSort('period-desc',this)">Vues période ↓</button>
+        </div>
+      </div>
+
+      <!-- PÉRIODE -->
+      <div class="ctrl-group">
+        <div class="ctrl-label">Période de vues affichée</div>
+        <div class="ctrl-btns" id="period-btns">
+          <button class="period-btn active" data-period="total" onclick="setPeriod('total',this)">Total</button>
+          <button class="period-btn" data-period="today" onclick="setPeriod('today',this)">Aujourd'hui</button>
+          <button class="period-btn" data-period="yesterday" onclick="setPeriod('yesterday',this)">Hier</button>
+          <button class="period-btn" data-period="7d" onclick="setPeriod('7d',this)">7 jours</button>
+          <button class="period-btn" data-period="30d" onclick="setPeriod('30d',this)">30 jours</button>
+
+          <!-- RANGE CALENDAR PICKER -->
+          <div style="position:relative;" id="range-picker-wrap">
+            <button class="period-btn" id="range-period-btn" onclick="toggleRangePicker()" style="display:flex;align-items:center;gap:5px;">
+              📅 <span id="range-btn-label">Plage de dates</span>
+            </button>
+            <div id="range-picker-dropdown" style="display:none;position:absolute;top:calc(100% + 6px);left:0;z-index:300;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:16px;min-width:340px;box-shadow:0 8px 32px rgba(0,0,0,0.6);">
+              <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:0.68rem;letter-spacing:0.12em;text-transform:uppercase;color:var(--text-dim);margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;">
+                <span>1er clic = début  •  2e clic = fin  •  1 seul clic = depuis ce jour jusqu'à aujourd'hui</span>
+                <span id="range-selection-info" style="color:var(--accent);font-size:0.72rem;"></span>
+              </div>
+              <div style="display:grid;grid-template-columns:1fr;gap:20px;">
+                <!-- Month 1 -->
+                <div>
+                  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+                    <button onclick="rangeCalPrev()" style="background:transparent;border:1px solid var(--border);color:var(--text-dim);width:26px;height:26px;border-radius:3px;cursor:pointer;">‹</button>
+                    <div id="range-cal-m1-label" style="font-family:'Syne',sans-serif;font-weight:700;font-size:0.75rem;"></div>
+                    <button onclick="rangeCalNext()" style="background:transparent;border:1px solid var(--border);color:var(--text-dim);width:26px;height:26px;border-radius:3px;cursor:pointer;">›</button>
+                  </div>
+                  <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px;margin-bottom:4px;">
+                    <div style="font-size:0.58rem;color:var(--text-muted);text-align:center;">L</div><div style="font-size:0.58rem;color:var(--text-muted);text-align:center;">M</div><div style="font-size:0.58rem;color:var(--text-muted);text-align:center;">M</div><div style="font-size:0.58rem;color:var(--text-muted);text-align:center;">J</div><div style="font-size:0.58rem;color:var(--text-muted);text-align:center;">V</div><div style="font-size:0.58rem;color:var(--text-muted);text-align:center;">S</div><div style="font-size:0.58rem;color:var(--text-muted);text-align:center;">D</div>
+                  </div>
+                  <div id="range-cal-m1-grid" style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px;"></div>
+                </div>
+                <div id="range-cal-m2-grid" style="display:none;"></div><div id="range-cal-m2-label" style="display:none;"></div>
+              </div>
+              <!-- Actions -->
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-top:14px;padding-top:12px;border-top:1px solid var(--border);">
+                <div style="display:flex;gap:6px;">
+                  <button class="day-btn" onclick="setRangePreset('today')">Aujourd'hui</button>
+                  <button class="day-btn" onclick="setRangePreset('yesterday')">Hier</button>
+                  <button class="day-btn" onclick="setRangePreset('7d')">7 jours</button>
+                  <button class="day-btn" onclick="setRangePreset('30d')">30 jours</button>
+                </div>
+                <div style="display:flex;gap:6px;">
+                  <button class="btn btn-ghost btn-sm" onclick="clearRange()">Réinitialiser</button>
+                  <button class="btn btn-sm" id="range-apply-btn" onclick="applyRange()" disabled style="opacity:0.4;">Appliquer</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- SEARCH -->
+      <div class="ctrl-group" style="margin-left:auto;">
+        <div class="ctrl-label">Recherche</div>
+        <input class="search-input" id="searchInput" placeholder="Rechercher..." oninput="applyFilters()" />
+      </div>
+
+    </div>
+
+    <div class="videos-header">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <div class="section-title" style="margin:0">Liste des vidéos</div>
+        <span class="count-badge" id="video-count">0 vidéos</span>
+        <span id="period-indicator" style="display:none" class="period-indicator"></span>
+      </div>
+      <button class="btn" id="main-refresh-btn" onclick="manualRefresh()" style="display:flex;align-items:center;gap:8px;">
+        <span id="refresh-icon">↻</span> Actualiser les stats
+      </button>
+    </div>
+
+    <div id="video-list-container">
+      <div class="loading"><div class="spinner"></div> Chargement...</div>
+    </div>
+    <!-- PAGINATION -->
+    <div class="pagination-bar" id="pagination-bar" style="display:none;">
+      <div class="pagination-info" id="pagination-info"></div>
+      <div class="pagination-controls" id="pagination-controls"></div>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span style="font-size:0.65rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.08em;">Par page</span>
+        <select class="perpage-select" id="perpage-select" onchange="setPerPage(parseInt(this.value))">
+          <option value="50" selected>50</option>
+          <option value="100">100</option>
+          <option value="200">200</option>
+          <option value="400">400</option>
+        </select>
+      </div>
+    </div>
+  <!-- DELETE CONFIRM MODAL -->
+  <div id="delete-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:600;align-items:center;justify-content:center;">
+    <div style="background:var(--surface);border:1px solid var(--error);border-radius:6px;width:420px;max-width:92vw;padding:28px;position:relative;">
+      <div style="position:absolute;top:0;left:0;right:0;height:2px;background:var(--error);border-radius:6px 6px 0 0;"></div>
+      <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:1rem;margin-bottom:8px;color:var(--error);">⚠ Retirer cette vidéo ?</div>
+      <div id="delete-video-title" style="font-size:0.78rem;color:var(--text-dim);margin-bottom:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></div>
+      <div style="font-size:0.72rem;color:var(--text-muted);margin-bottom:24px;">L'historique des stats sera aussi supprimé définitivement.</div>
+      <div style="display:flex;gap:10px;justify-content:flex-end;">
+        <button class="btn btn-ghost" onclick="closeDeleteModal()">Annuler</button>
+        <button class="btn" id="delete-confirm-btn" style="background:var(--error);" onclick="executeDelete()">Supprimer définitivement</button>
+      </div>
+    </div>
+  </div>
+
+  </div>
+
+  <!-- STATS PANEL -->
+  <div class="panel" id="panel-stats">
+    <div class="stats-top">
+      <div class="stat-card"><div class="stat-value" id="stat-total-views">—</div><div class="stat-label">Vues ce jour-là</div></div>
+      <div class="stat-card"><div class="stat-value" id="stat-today-delta">—</div><div class="stat-label">Nouvelles vues</div></div>
+      <div class="stat-card"><div class="stat-value" id="stat-video-count">—</div><div class="stat-label">Vidéos suivies</div></div>
+    </div>
+
+    <!-- DATE NAV -->
+    <div class="daily-header">
+      <div class="date-label" id="today-label">Bilan</div>
+      <button class="btn btn-ghost btn-sm" onclick="loadStats(selectedDate)">↻ Rafraîchir</button>
+    </div>
+
+    <!-- QUICK DATE BUTTONS + CALENDAR -->
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px;flex-wrap:wrap;">
+      <button class="day-btn" id="qd-today" onclick="loadStats(todayFR())">Aujourd'hui</button>
+      <button class="day-btn" id="qd-yesterday" onclick="loadStats(prevDay(todayFR()))">Hier</button>
+      <button class="day-btn" id="qd-before" onclick="loadStats(prevDay(prevDay(todayFR())))">Avant-hier</button>
+
+      <!-- CALENDAR PICKER -->
+      <div style="position:relative;" id="cal-wrap">
+        <button class="day-btn" id="cal-btn" onclick="toggleStatsCal()" style="display:flex;align-items:center;gap:5px;">
+          📅 Choisir une date
+        </button>
+        <div id="stats-cal-dropdown" style="display:none;position:absolute;top:calc(100% + 6px);left:0;z-index:300;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:14px;min-width:260px;box-shadow:0 8px 32px rgba(0,0,0,0.6);">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+            <button onclick="calPrevMonth()" style="background:transparent;border:1px solid var(--border);color:var(--text-dim);width:28px;height:28px;border-radius:3px;cursor:pointer;font-size:0.9rem;">‹</button>
+            <div id="cal-month-label" style="font-family:'Syne',sans-serif;font-weight:700;font-size:0.8rem;"></div>
+            <button onclick="calNextMonth()" style="background:transparent;border:1px solid var(--border);color:var(--text-dim);width:28px;height:28px;border-radius:3px;cursor:pointer;font-size:0.9rem;">›</button>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px;margin-bottom:6px;">
+            <div style="font-size:0.6rem;color:var(--text-muted);text-align:center;padding:3px;">L</div>
+            <div style="font-size:0.6rem;color:var(--text-muted);text-align:center;padding:3px;">M</div>
+            <div style="font-size:0.6rem;color:var(--text-muted);text-align:center;padding:3px;">M</div>
+            <div style="font-size:0.6rem;color:var(--text-muted);text-align:center;padding:3px;">J</div>
+            <div style="font-size:0.6rem;color:var(--text-muted);text-align:center;padding:3px;">V</div>
+            <div style="font-size:0.6rem;color:var(--text-muted);text-align:center;padding:3px;">S</div>
+            <div style="font-size:0.6rem;color:var(--text-muted);text-align:center;padding:3px;">D</div>
+          </div>
+          <div id="cal-grid" style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px;"></div>
+        </div>
+      </div>
+
+      <div style="flex:1;text-align:right;">
+        <div class="history-nav" id="history-nav" style="justify-content:flex-end;"></div>
+      </div>
+    </div>
+
+    <!-- CONTROLS -->
+    <div class="controls-bar" style="margin-bottom:14px;">
+      <div class="ctrl-group">
+        <div class="ctrl-label">Trier par</div>
+        <div class="ctrl-btns">
+          <button class="sort-btn active" id="st-title" onclick="setStatsSort('title',this)">Titre A→Z</button>
+          <button class="sort-btn" id="st-views-desc" onclick="setStatsSort('views-desc',this)">Vues ↓</button>
+          <button class="sort-btn" id="st-views-asc" onclick="setStatsSort('views-asc',this)">Vues ↑</button>
+          <button class="sort-btn" id="st-delta-desc" onclick="setStatsSort('delta-desc',this)">Nouvelles vues ↓</button>
+          <button class="sort-btn" id="st-delta-asc" onclick="setStatsSort('delta-asc',this)">Nouvelles vues ↑</button>
+        </div>
+      </div>
+      <div class="ctrl-group" style="margin-left:auto;">
+        <div class="ctrl-label">Recherche</div>
+        <input class="search-input" id="statsSearch" placeholder="Rechercher une vidéo..." oninput="renderStatsTable()" />
+      </div>
+      <div style="display:flex;align-items:flex-end;gap:8px;">
+        <span style="font-size:0.65rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.08em;align-self:center;">Par page</span>
+        <select class="perpage-select" id="stats-perpage" onchange="statsPage=1;renderStatsTable()">
+          <option value="50" selected>50</option>
+          <option value="100">100</option>
+          <option value="200">200</option>
+          <option value="400">400</option>
+        </select>
+      </div>
+    </div>
+
+    <div id="stats-table-container"><div class="loading"><div class="spinner"></div> Chargement...</div></div>
+    <div class="pagination-bar" id="stats-pagination-bar" style="display:none;">
+      <div class="pagination-info" id="stats-pagination-info"></div>
+      <div class="pagination-controls" id="stats-pagination-controls"></div>
+    </div>
+  </div>
+
+
+  <!-- STATUS PANEL -->
+  <div class="panel" id="panel-status">
+
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:10px;">
+      <div>
+        <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:1.1rem;margin-bottom:4px;">État des vidéos</div>
+        <div style="font-size:0.72rem;color:var(--text-muted);">Mis à jour automatiquement à minuit — vidéos supprimées détectées en rouge</div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <input class="search-input" id="status-search" placeholder="Rechercher..." oninput="renderStatusPanel()" style="width:200px;" />
+        <div class="ctrl-btns">
+          <button class="sort-btn active" id="st-filter-all" onclick="setStatusFilter('all',this)">Toutes</button>
+          <button class="sort-btn" id="st-filter-deleted" onclick="setStatusFilter('deleted',this)">Supprimées</button>
+          <button class="sort-btn" id="st-filter-online" onclick="setStatusFilter('online',this)">En ligne</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- SUMMARY CARDS -->
+    <div class="stats-top" style="grid-template-columns:repeat(3,1fr);margin-bottom:24px;">
+      <div class="stat-card" style="border-color:var(--success);">
+        <div class="stat-value c-online" id="st-online-count">—</div>
+        <div class="stat-label">Vidéos en ligne</div>
+      </div>
+      <div class="stat-card" style="border-color:var(--error);">
+        <div class="stat-value c-deleted" id="st-deleted-count">—</div>
+        <div class="stat-label">Vidéos supprimées</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" id="st-recent-count">—</div>
+        <div class="stat-label">Supprimées ce mois</div>
+      </div>
+    </div>
+
+    <div id="status-list-container">
+      <div class="loading"><div class="spinner"></div> Chargement...</div>
+    </div>
+    <div class="pagination-bar" id="status-pagination-bar" style="display:none;">
+      <div class="pagination-info" id="status-pagination-info"></div>
+      <div class="pagination-controls" id="status-pagination-controls"></div>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span style="font-size:0.65rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.08em;">Par page</span>
+        <select class="perpage-select" id="status-perpage" onchange="statusPage=1;renderStatusPanel()">
+          <option value="50" selected>50</option>
+          <option value="100">100</option>
+          <option value="200">200</option>
+        </select>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ANALYTICS PANEL -->
+  <div class="panel" id="panel-analytics">
+
+    <!-- KPI CARDS -->
+    <div class="stats-top" style="grid-template-columns:repeat(4,1fr);margin-bottom:24px;">
+      <div class="stat-card"><div class="stat-value" id="an-total">—</div><div class="stat-label">Vues totales</div></div>
+      <div class="stat-card"><div class="stat-value" id="an-period">—</div><div class="stat-label">Vues sur la période</div></div>
+      <div class="stat-card"><div class="stat-value" id="an-avg">—</div><div class="stat-label">Moyenne / jour</div></div>
+      <div class="stat-card"><div class="stat-value" id="an-growth" style="color:var(--success)">—</div><div class="stat-label">Croissance</div></div>
+    </div>
+
+    <!-- CONTROLS -->
+    <div class="controls-bar" style="margin-bottom:16px;align-items:flex-end;flex-wrap:wrap;">
+      <div class="ctrl-group">
+        <div class="ctrl-label">Période rapide</div>
+        <div class="ctrl-btns">
+          <button class="sort-btn" id="an-p7" onclick="setAnalyticsPeriod(7,this)">7 jours</button>
+          <button class="sort-btn active" id="an-p14" onclick="setAnalyticsPeriod(14,this)">14 jours</button>
+          <button class="sort-btn" id="an-p30" onclick="setAnalyticsPeriod(30,this)">30 jours</button>
+          <button class="sort-btn" id="an-p90" onclick="setAnalyticsPeriod(90,this)">3 mois</button>
+
+          <!-- CUSTOM RANGE -->
+          <div style="position:relative;" id="an-cal-wrap">
+            <button class="sort-btn" id="an-pcustom" onclick="toggleAnCal()">📅 <span id="an-cal-label">Personnalisé</span></button>
+            <div id="an-cal-dropdown" style="display:none;position:absolute;top:calc(100% + 6px);left:0;z-index:300;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:16px;min-width:280px;box-shadow:0 8px 32px rgba(0,0,0,0.6);">
+              <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:0.65rem;letter-spacing:0.12em;text-transform:uppercase;color:var(--text-dim);margin-bottom:12px;display:flex;justify-content:space-between;">
+                <span>1er clic = début &nbsp;•&nbsp; 2e clic = fin</span>
+                <span id="an-range-info" style="color:var(--accent);"></span>
+              </div>
+              <!-- Calendar -->
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+                <button onclick="anCalPrev()" style="background:transparent;border:1px solid var(--border);color:var(--text-dim);width:26px;height:26px;border-radius:3px;cursor:pointer;">‹</button>
+                <div id="an-cal-month-label" style="font-family:'Syne',sans-serif;font-weight:700;font-size:0.75rem;"></div>
+                <button onclick="anCalNext()" style="background:transparent;border:1px solid var(--border);color:var(--text-dim);width:26px;height:26px;border-radius:3px;cursor:pointer;">›</button>
+              </div>
+              <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px;margin-bottom:6px;">
+                <div style="font-size:0.58rem;color:var(--text-muted);text-align:center;">L</div><div style="font-size:0.58rem;color:var(--text-muted);text-align:center;">M</div><div style="font-size:0.58rem;color:var(--text-muted);text-align:center;">M</div><div style="font-size:0.58rem;color:var(--text-muted);text-align:center;">J</div><div style="font-size:0.58rem;color:var(--text-muted);text-align:center;">V</div><div style="font-size:0.58rem;color:var(--text-muted);text-align:center;">S</div><div style="font-size:0.58rem;color:var(--text-muted);text-align:center;">D</div>
+              </div>
+              <div id="an-cal-grid" style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px;"></div>
+              <!-- Presets -->
+              <div style="display:flex;gap:4px;margin-top:12px;flex-wrap:wrap;">
+                <button class="day-btn" onclick="anSetPreset('week')">Cette semaine</button>
+                <button class="day-btn" onclick="anSetPreset('month')">Ce mois</button>
+                <button class="day-btn" onclick="anSetPreset('lastmonth')">Mois dernier</button>
+              </div>
+              <!-- Actions -->
+              <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px;padding-top:10px;border-top:1px solid var(--border);">
+                <button class="btn btn-ghost btn-sm" onclick="anCalReset()">Réinitialiser</button>
+                <button class="btn btn-sm" id="an-apply-btn" onclick="anApplyRange()" disabled style="opacity:0.4;">Appliquer</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="ctrl-group">
+        <div class="ctrl-label">Vue</div>
+        <div class="ctrl-btns">
+          <button class="sort-btn active" id="an-view-line" onclick="setAnalyticsView('line',this)">Courbe</button>
+          <button class="sort-btn" id="an-view-bar" onclick="setAnalyticsView('bar',this)">Barres</button>
+        </div>
+      </div>
+      <div class="ctrl-group">
+        <div class="ctrl-label">Données</div>
+        <div class="ctrl-btns">
+          <button class="sort-btn active" id="an-data-delta" onclick="setAnalyticsData('delta',this)">Nouvelles vues/jour</button>
+          <button class="sort-btn" id="an-data-total" onclick="setAnalyticsData('total',this)">Vues cumulées</button>
+        </div>
+      </div>
+      <div style="margin-left:auto;font-size:0.68rem;color:var(--text-muted);align-self:center;">⚠ Pics anormaux exclus</div>
+    </div>
+    <!-- ACTIVE PERIOD LABEL -->
+    <div id="an-period-label" style="display:none;margin-bottom:16px;" class="period-indicator"></div>
+
+    <!-- CHART -->
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:24px;margin-bottom:24px;position:relative;">
+      <canvas id="analytics-chart" style="width:100%;max-height:340px;"></canvas>
+      <div id="analytics-loading" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:var(--surface);border-radius:4px;">
+        <div class="loading"><div class="spinner"></div> Chargement du graphique...</div>
+      </div>
+    </div>
+
+    <!-- DAILY TABLE -->
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:4px;overflow:hidden;">
+      <div style="padding:14px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;">
+        <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:0.72rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-dim);">Détail par jour</div>
+        <div style="font-size:0.68rem;color:var(--text-muted);">Pics exclus marqués en gris</div>
+      </div>
+      <div id="analytics-table"></div>
+    </div>
+
+  </div>
+
+</div>
+
+<div id="toast"></div>
+
+<script>
+const SUPABASE_URL = 'https://zcuisbcoqdadmuoxbwyy.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_n3ergcM-eApV9glraX4wWQ_bAy3HJTf';
+const YT_API_KEY   = 'AIzaSyAsWrWuxmNm6JUQ3mPDIFMAq22ESTl022A';
+
+let allVideos = [];
+let selectedDate = todayFR();
+let currentSort = 'views-desc';
+let currentPeriod = 'total';
+let customPeriodDate = null;   // YYYY-MM-DD string when period=custom
+let statsCache = {};           // { date: { video_id: view_count } }
+let allHistoryDates = [];      // sorted desc
+let currentPage = 1;
+let statsSort = 'title';
+let statsPage = 1;
+let statsDataCache = [];  // [{title, dv, pv, delta, is_deleted}]
+let perPage = 50;
+let filteredVideosCache = [];  // last filtered+sorted list
+
+// ─── DATE HELPERS ────────────────────────────────────────────────────────────
+function todayFR() {
+  return new Date().toLocaleDateString('fr-CA', { timeZone: 'Europe/Paris' });
+}
+function prevDay(dateStr) {
+  const d = new Date(dateStr + 'T12:00:00Z');
+  d.setDate(d.getDate() - 1);
+  return d.toISOString().split('T')[0];
+}
+function daysAgo(n) {
+  const d = new Date();
+  d.setDate(d.getDate() - n);
+  return d.toLocaleDateString('fr-CA', { timeZone: 'Europe/Paris' });
+}
+function fmtDate(d) {
+  if (!d) return '—';
+  const p = String(d).split('-');
+  return p.length === 3 ? `${p[2]}/${p[1]}/${p[0]}` : d;
+}
+
+// ─── SUPABASE ────────────────────────────────────────────────────────────────
+async function sbGet(table, params='') {
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${params}`, {
+    headers: { apikey:SUPABASE_KEY, Authorization:`Bearer ${SUPABASE_KEY}` }
+  });
+  return r.json();
+}
+async function sbPost(table, body) {
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
+    method:'POST',
+    headers: { apikey:SUPABASE_KEY, Authorization:`Bearer ${SUPABASE_KEY}`, 'Content-Type':'application/json', Prefer:'return=representation' },
+    body: JSON.stringify(body)
+  });
+  return { status:r.status, data:await r.json() };
+}
+async function sbPatch(table, filter, body) {
+  await fetch(`${SUPABASE_URL}/rest/v1/${table}?${filter}`, {
+    method:'PATCH',
+    headers: { apikey:SUPABASE_KEY, Authorization:`Bearer ${SUPABASE_KEY}`, 'Content-Type':'application/json' },
+    body: JSON.stringify(body)
+  });
+}
+async function sbDelete(table, filter) {
+  await fetch(`${SUPABASE_URL}/rest/v1/${table}?${filter}`, {
+    method:'DELETE',
+    headers: { apikey:SUPABASE_KEY, Authorization:`Bearer ${SUPABASE_KEY}` }
+  });
+}
+
+// ─── YOUTUBE ─────────────────────────────────────────────────────────────────
+function extractVideoId(url) {
+  const m = url.match(/(?:v=|\/embed\/|\/shorts\/|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
+  return m ? m[1] : null;
+}
+async function fetchYTStats(videoIds) {
+  if (!videoIds.length) return {};
+  const r = await fetch(`https://www.googleapis.com/youtube/v3/videos?part=snippet,statistics&id=${videoIds.join(',')}&key=${YT_API_KEY}`);
+  const data = await r.json();
+  const map = {};
+  (data.items || []).forEach(item => {
+    map[item.id] = {
+      title: item.snippet.title,
+      views: parseInt(item.statistics.viewCount || 0),
+      thumb: item.snippet.thumbnails?.medium?.url || '',
+      publishedAt: item.snippet.publishedAt?.split('T')[0] || null
+    };
+  });
+  return map;
+}
+
+// ─── FORMAT ──────────────────────────────────────────────────────────────────
+function fmt(n) {
+  if (n === null || n === undefined || isNaN(n)) return '—';
+  if (n >= 1000000) return (n/1000000).toFixed(1)+'M';
+  if (n >= 1000) return (n/1000).toFixed(1)+'K';
+  return n.toLocaleString('fr-FR');
+}
+
+// ─── TOAST ───────────────────────────────────────────────────────────────────
+function toast(msg, type='success') {
+  const el = document.getElementById('toast');
+  el.textContent = msg; el.className = `show ${type}`;
+  setTimeout(()=>el.className='', 3200);
+}
+
+// ─── TABS ────────────────────────────────────────────────────────────────────
+function showTab(name, btn) {
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById(`panel-${name}`).classList.add('active');
+  if (name==='stats') loadStats(selectedDate);
+  if (name==='analytics') loadAnalytics();
+  if (name==='status') loadStatusPanel();
+}
+
+// ─── SORT & PERIOD CONTROLS ──────────────────────────────────────────────────
+function setSort(s, btn) {
+  currentSort = s;
+  document.querySelectorAll('.sort-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  applyFilters();
+}
+
+let rangeCalYear = new Date().getFullYear();
+let rangeCalMonth = new Date().getMonth();
+let rangeStart = null;   // YYYY-MM-DD
+let rangeEnd = null;     // YYYY-MM-DD
+let rangeStep = 0;       // 0=no selection, 1=start picked, 2=done
+
+function setPeriod(p, btn) {
+  currentPeriod = p;
+  customPeriodDate = null;
+  rangeStart = null; rangeEnd = null; rangeStep = 0;
+  document.querySelectorAll('.period-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('range-picker-dropdown').style.display = 'none';
+  updatePeriodIndicator();
+  applyFilters();
+}
+
+function toggleRangePicker() {
+  const dd = document.getElementById('range-picker-dropdown');
+  const isOpen = dd.style.display !== 'none';
+  dd.style.display = isOpen ? 'none' : 'block';
+  if (!isOpen) renderRangeCalendars();
+}
+
+function renderRangeCalendars() {
+  const monthNames = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
+  // Month 1 = rangeCalMonth, Month 2 = next month
+  let m2 = rangeCalMonth + 1, y2 = rangeCalYear;
+  if (m2 > 11) { m2 = 0; y2++; }
+
+  document.getElementById('range-cal-m1-label').textContent = `${monthNames[rangeCalMonth]} ${rangeCalYear}`;
+  document.getElementById('range-cal-m2-label').textContent = `${monthNames[m2]} ${y2}`;
+
+  renderRangeMonth('range-cal-m1-grid', rangeCalYear, rangeCalMonth);
+  renderRangeMonth('range-cal-m2-grid', y2, m2);
+
+  // Update info text
+  const info = document.getElementById('range-selection-info');
+  if (!rangeStart && !rangeEnd) info.textContent = '';
+  else if (rangeStart && !rangeEnd) info.textContent = `Début: ${fmtDate(rangeStart)} — cliquez la fin`;
+  else info.textContent = `${fmtDate(rangeStart)} → ${fmtDate(rangeEnd)}`;
+
+  // Apply button
+  const applyBtn = document.getElementById('range-apply-btn');
+  applyBtn.disabled = !rangeStart;
+  applyBtn.style.opacity = rangeStart ? '1' : '0.4';
+  // Update button label
+  if (rangeStart && !rangeEnd) applyBtn.textContent = 'Appliquer (depuis ce jour)';
+  else if (rangeStart && rangeEnd) applyBtn.textContent = 'Appliquer la plage';
+  else applyBtn.textContent = 'Appliquer';
+}
+
+function renderRangeMonth(gridId, year, month) {
+  const grid = document.getElementById(gridId);
+  const today = todayFR();
+  const firstDay = new Date(year, month, 1).getDay();
+  const offset = firstDay === 0 ? 6 : firstDay - 1;
+  const daysInMonth = new Date(year, month+1, 0).getDate();
+
+  let cells = '';
+  for (let i=0; i<offset; i++) cells += '<div></div>';
+  for (let d=1; d<=daysInMonth; d++) {
+    const ds = `${year}-${String(month+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const isFuture = ds > today;
+    const isToday = ds === today;
+    const isStart = ds === rangeStart;
+    const isEnd = ds === rangeEnd;
+    const inRange = rangeStart && rangeEnd && ds > rangeStart && ds < rangeEnd;
+    const isSingleDay = rangeStart && !rangeEnd && ds === rangeStart;
+
+    let bg = 'transparent'; let color = 'var(--text-dim)'; let border = 'none'; let fw = '400';
+    if (isFuture) { color = 'var(--text-muted)'; }
+    else if (isStart || isEnd) { bg = 'var(--accent)'; color = 'white'; fw = '700'; }
+    else if (inRange) { bg = 'rgba(255,61,0,0.18)'; color = 'var(--text)'; }
+    else if (isToday) { border = '1px solid var(--warning)'; color = 'var(--warning)'; }
+    else { color = 'var(--text)'; }
+
+    const onclick = isFuture ? '' : `onclick="rangeClickDay('${ds}')"`;
+    cells += `<div style="text-align:center;padding:5px 2px;border-radius:3px;font-size:0.72rem;cursor:${isFuture?'not-allowed':'pointer'};background:${bg};color:${color};border:${border};font-weight:${fw};" ${onclick}>${d}</div>`;
+  }
+  grid.innerHTML = cells;
+}
+
+function rangeClickDay(ds) {
+  if (rangeStep === 0 || rangeStep === 2) {
+    rangeStart = ds; rangeEnd = null; rangeStep = 1;
+  } else if (rangeStep === 1) {
+    if (ds < rangeStart) { rangeEnd = rangeStart; rangeStart = ds; }
+    else if (ds === rangeStart) { rangeEnd = ds; }
+    else { rangeEnd = ds; }
+    rangeStep = 2;
+  }
+  renderRangeCalendars();
+}
+
+function rangeCalPrev() {
+  rangeCalMonth--;
+  if (rangeCalMonth < 0) { rangeCalMonth=11; rangeCalYear--; }
+  renderRangeCalendars();
+}
+function rangeCalNext() {
+  rangeCalMonth++;
+  if (rangeCalMonth > 11) { rangeCalMonth=0; rangeCalYear++; }
+  renderRangeCalendars();
+}
+
+function setRangePreset(p) {
+  const today = todayFR();
+  if (p==='today') { rangeStart=today; rangeEnd=today; }
+  else if (p==='yesterday') { const y=prevDay(today); rangeStart=y; rangeEnd=y; }
+  else if (p==='7d') { rangeStart=daysAgo(7); rangeEnd=today; }
+  else if (p==='30d') { rangeStart=daysAgo(30); rangeEnd=today; }
+  rangeStep=2;
+  renderRangeCalendars();
+}
+
+function clearRange() {
+  rangeStart=null; rangeEnd=null; rangeStep=0;
+  currentPeriod='total';
+  document.querySelectorAll('.period-btn').forEach(b=>b.classList.remove('active'));
+  document.querySelector('.period-btn[data-period="total"]').classList.add('active');
+  document.getElementById('range-picker-dropdown').style.display='none';
+  updatePeriodIndicator();
+  applyFilters();
+}
+
+function applyRange() {
+  if (!rangeStart) return;
+  // If no end date, use today (= from rangeStart to today)
+  if (!rangeEnd) rangeEnd = todayFR();
+  currentPeriod = 'range';
+  customPeriodDate = rangeStart;
+  document.querySelectorAll('.period-btn').forEach(b=>b.classList.remove('active'));
+  document.getElementById('range-period-btn').classList.add('active');
+  document.getElementById('range-picker-dropdown').style.display='none';
+  updatePeriodIndicator();
+  applyFilters();
+}
+
+function updatePeriodIndicator() {
+  const el = document.getElementById('period-indicator');
+  const btn = document.getElementById('range-btn-label');
+  if (currentPeriod === 'range' && rangeStart) {
+    const label = rangeEnd && rangeEnd !== rangeStart
+      ? `${fmtDate(rangeStart)} → ${fmtDate(rangeEnd)}`
+      : fmtDate(rangeStart);
+    el.style.display='inline-flex'; el.textContent=`📅 ${label}`;
+    if (btn) btn.textContent = label;
+  } else if (currentPeriod !== 'total') {
+    const labels = { today:"Aujourd'hui", yesterday:'Hier', '7d':'7 jours', '30d':'30 jours' };
+    el.style.display='inline-flex'; el.textContent=labels[currentPeriod]||currentPeriod;
+    if (btn) btn.textContent='Plage de dates';
+  } else {
+    el.style.display='none';
+    if (btn) btn.textContent='Plage de dates';
+  }
+}
+
+// Close range picker on outside click
+document.addEventListener('click', e => {
+  const wrap = document.getElementById('range-picker-wrap');
+  if (wrap && !wrap.contains(e.target)) {
+    document.getElementById('range-picker-dropdown').style.display='none';
+  }
+});
+
+// ─── COMPUTE VIEWS FOR PERIOD ────────────────────────────────────────────────
+function getViewsForPeriod(videoId) {
+  const today = todayFR();
+  const todayViews = statsCache[today]?.[videoId] || 0;
+
+  if (currentPeriod === 'total') {
+    return allVideos.find(v=>v.video_id===videoId)?.yt?.views || 0;
+  }
+  if (currentPeriod === 'today') {
+    const yest = statsCache[prevDay(today)]?.[videoId] || 0;
+    return Math.max(0, todayViews - yest);
+  }
+  if (currentPeriod === 'yesterday') {
+    const yest = prevDay(today);
+    const dayBefore = prevDay(yest);
+    return Math.max(0, (statsCache[yest]?.[videoId]||0) - (statsCache[dayBefore]?.[videoId]||0));
+  }
+  if (currentPeriod === '7d') {
+    const from = daysAgo(7);
+    const fromViews = getClosestBefore(videoId, from);
+    return Math.max(0, todayViews - fromViews);
+  }
+  if (currentPeriod === '30d') {
+    const from = daysAgo(30);
+    const fromViews = getClosestBefore(videoId, from);
+    return Math.max(0, todayViews - fromViews);
+  }
+  if (currentPeriod === 'range' && rangeStart) {
+    // End = rangeEnd or today, Start = views just before rangeStart
+    const endDate = rangeEnd || todayFR();
+    const endViews = statsCache[endDate]?.[videoId] || getClosestAfter(videoId, endDate) || todayViews;
+    const fromViews = getClosestBefore(videoId, prevDay(rangeStart));
+    return Math.max(0, endViews - fromViews);
+  }
+  if (currentPeriod === 'custom' && customPeriodDate) {
+    const fromViews = getClosestBefore(videoId, customPeriodDate);
+    return Math.max(0, todayViews - fromViews);
+  }
+  return allVideos.find(v=>v.video_id===videoId)?.yt?.views || 0;
+}
+
+function getClosestAfter(videoId, targetDate) {
+  const candidates = allHistoryDates.filter(d => d <= targetDate);
+  if (!candidates.length) return 0;
+  return statsCache[candidates[0]]?.[videoId] || 0;
+}
+
+function getClosestBefore(videoId, targetDate) {
+  // Find the closest recorded date <= targetDate
+  const candidates = allHistoryDates.filter(d => d <= targetDate);
+  if (!candidates.length) return 0;
+  const closest = candidates[0]; // already sorted desc
+  return statsCache[closest]?.[videoId] || 0;
+}
+
+// ─── APPLY FILTERS & SORT ────────────────────────────────────────────────────
+function applyFilters(resetPage=true) {
+  const q = document.getElementById('searchInput').value.toLowerCase();
+  let videos = allVideos.filter(v =>
+    (v.yt?.title||v.title||v.url).toLowerCase().includes(q) || v.url.toLowerCase().includes(q)
+  );
+
+  // Attach period views for sorting
+  videos = videos.map(v => ({ ...v, periodViews: getViewsForPeriod(v.video_id) }));
+
+  // Sort
+  videos.sort((a,b) => {
+    if (currentSort === 'views-desc') return (b.yt?.views||0) - (a.yt?.views||0);
+    if (currentSort === 'views-asc') return (a.yt?.views||0) - (b.yt?.views||0);
+    if (currentSort === 'date-desc') return new Date(b.added_at||0) - new Date(a.added_at||0);
+    if (currentSort === 'date-asc') return new Date(a.added_at||0) - new Date(b.added_at||0);
+    if (currentSort === 'publish-desc') return new Date(b.published_at||0) - new Date(a.published_at||0);
+    if (currentSort === 'period-desc') return (b.periodViews||0) - (a.periodViews||0);
+    return 0;
+  });
+
+  filteredVideosCache = videos;
+  if (resetPage) currentPage = 1;
+  renderPage();
+}
+
+function setPerPage(n) {
+  perPage = n;
+  currentPage = 1;
+  renderPage();
+}
+
+function goToPage(p) {
+  currentPage = p;
+  renderPage();
+  // Scroll to top of list
+  document.getElementById('video-list-container').scrollIntoView({behavior:'smooth', block:'start'});
+}
+
+function renderPage() {
+  const total = filteredVideosCache.length;
+  const totalPages = Math.max(1, Math.ceil(total / perPage));
+  if (currentPage > totalPages) currentPage = totalPages;
+
+  const start = (currentPage - 1) * perPage;
+  const end = Math.min(start + perPage, total);
+  const pageVideos = filteredVideosCache.slice(start, end);
+
+  renderVideos(pageVideos);
+
+  // Pagination bar
+  const bar = document.getElementById('pagination-bar');
+  const info = document.getElementById('pagination-info');
+  const controls = document.getElementById('pagination-controls');
+
+  if (total === 0) { bar.style.display='none'; return; }
+  bar.style.display = 'flex';
+
+  info.textContent = `${start+1}–${end} sur ${total} vidéo${total>1?'s':''}`;
+
+  // Build page buttons
+  let btns = '';
+  // Prev
+  btns += `<button class="page-btn" ${currentPage===1?'disabled':''} onclick="goToPage(${currentPage-1})">‹</button>`;
+
+  // Page numbers with ellipsis
+  const pages = buildPageRange(currentPage, totalPages);
+  for (const p of pages) {
+    if (p === '...') {
+      btns += `<span class="page-ellipsis">…</span>`;
+    } else {
+      btns += `<button class="page-btn ${p===currentPage?'active':''}" onclick="goToPage(${p})">${p}</button>`;
+    }
+  }
+
+  // Next
+  btns += `<button class="page-btn" ${currentPage===totalPages?'disabled':''} onclick="goToPage(${currentPage+1})">›</button>`;
+
+  controls.innerHTML = btns;
+
+  // Sync perpage select
+  document.getElementById('perpage-select').value = perPage;
+}
+
+function buildPageRange(current, total) {
+  if (total <= 7) return Array.from({length:total},(_,i)=>i+1);
+  const pages = [];
+  if (current <= 4) {
+    for (let i=1; i<=5; i++) pages.push(i);
+    pages.push('...'); pages.push(total);
+  } else if (current >= total - 3) {
+    pages.push(1); pages.push('...');
+    for (let i=total-4; i<=total; i++) pages.push(i);
+  } else {
+    pages.push(1); pages.push('...');
+    for (let i=current-1; i<=current+1; i++) pages.push(i);
+    pages.push('...'); pages.push(total);
+  }
+  return pages;
+}
+
+// ─── LOAD VIDEOS ─────────────────────────────────────────────────────────────
+async function loadVideos() {
+  const videos = await sbGet('videos', 'order=added_at.desc');
+  allVideos = videos || [];
+
+  // Fetch YT stats
+  const ytMap = {};
+  if (allVideos.length) {
+    for (let i=0; i<allVideos.length; i+=50) {
+      Object.assign(ytMap, await fetchYTStats(allVideos.slice(i,i+50).map(v=>v.video_id)));
+    }
+  }
+
+  for (const v of allVideos) {
+    v.yt = ytMap[v.video_id] || null;
+    v.isDeleted = !v.yt;
+    // Save publish date to DB if new
+    if (v.yt?.publishedAt && !v.published_at) {
+      await sbPatch('videos', `id=eq.${v.id}`, { published_at: v.yt.publishedAt });
+      v.published_at = v.yt.publishedAt;
+    }
+    if (!!v.is_deleted !== v.isDeleted) {
+      await sbPatch('videos', `id=eq.${v.id}`, { is_deleted: v.isDeleted });
+    }
+  }
+
+  // Load all stats history for period calculations
+  const allStats = await sbGet('stats_history', 'select=video_id,view_count,recorded_at&order=recorded_at.desc');
+  statsCache = {};
+  allHistoryDates = [];
+  const dateSet = new Set();
+  allStats.forEach(s => {
+    if (!statsCache[s.recorded_at]) statsCache[s.recorded_at] = {};
+    statsCache[s.recorded_at][s.video_id] = s.view_count;
+    dateSet.add(s.recorded_at);
+  });
+  allHistoryDates = [...dateSet].sort((a,b)=>b.localeCompare(a));
+
+  // Header stats
+  const today = todayFR();
+  const yesterday = prevDay(today);
+  let totalViews=0, todayDelta=0, onlineCount=0, deletedCount=0;
+  allVideos.forEach(v => {
+    totalViews += v.yt?.views || 0;
+    v.isDeleted ? deletedCount++ : onlineCount++;
+    const tv = statsCache[today]?.[v.video_id]||0;
+    const yv = statsCache[yesterday]?.[v.video_id]||0;
+    if (tv - yv > 0) todayDelta += tv - yv;
+  });
+
+  document.getElementById('hdr-views').textContent = fmt(totalViews);
+  document.getElementById('hdr-today').textContent = todayDelta > 0 ? `+${fmt(todayDelta)}` : '—';
+  document.getElementById('hdr-online').textContent = onlineCount;
+  document.getElementById('hdr-deleted').textContent = deletedCount;
+  document.getElementById('hdr-date').textContent = new Date().toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
+  document.getElementById('video-count').textContent = `${allVideos.length} vidéo${allVideos.length>1?'s':''}`;
+  // Update status badge
+  const _delCount = allVideos.filter(v=>v.isDeleted).length;
+  const _badge = document.getElementById('status-badge');
+  if (_badge) { _badge.style.display = _delCount>0?'inline':'none'; _badge.textContent = _delCount; }
+
+  updatePeriodIndicator();
+  applyFilters();
+}
+
+// ─── RENDER VIDEOS ────────────────────────────────────────────────────────────
+function renderVideos(videos) {
+  const container = document.getElementById('video-list-container');
+  if (!videos.length) {
+    container.innerHTML = `<div class="empty-state"><div class="big">📺</div>Aucune vidéo trouvée.</div>`;
+    return;
+  }
+
+  const showPeriodViews = currentPeriod !== 'total';
+
+  const rows = videos.map(v => {
+    const del = v.isDeleted;
+    const thumb = v.yt?.thumb
+      ? `<img class="video-thumb ${del?'faded':''}" src="${v.yt.thumb}" alt="" loading="lazy">`
+      : `<div class="video-thumb-placeholder">${del?'🗑':'…'}</div>`;
+    const title = v.yt?.title || v.title || v.url;
+    const totalViews = v.yt?.views !== undefined ? fmt(v.yt.views) : '—';
+    const periodViews = v.periodViews !== undefined ? fmt(v.periodViews) : '—';
+    const statusClass = del ? 'deleted' : 'online';
+    const statusLabel = del ? 'Supp.' : 'Actif';
+
+    const addedDate = fmtDate(v.added_at?.split('T')[0]);
+    const publishDate = v.yt?.publishedAt || v.published_at;
+
+    const viewDisplay = showPeriodViews ? periodViews : totalViews;
+    const viewLabelText = showPeriodViews ? 'vues période' : 'vues totales';
+    const deltaHtml = showPeriodViews && v.periodViews > 0
+      ? `<div class="view-delta pos">+${fmt(v.periodViews)} période</div>`
+      : '';
+
+    return `<div class="video-item ${del?'is-deleted':''}" id="vitem-${v.id}">
+      <div class="status-col">
+        <div class="status-dot ${statusClass}"></div>
+        <div class="status-text ${statusClass}">${statusLabel}</div>
+      </div>
+      <a href="${v.url}" target="_blank" rel="noopener">${thumb}</a>
+      <div class="video-info">
+        <div class="video-title ${del?'faded':''}" title="${title}">${title}</div>
+        <div class="video-url">${v.url}</div>
+      </div>
+      <div class="view-count">
+        <div class="view-number">${viewDisplay}</div>
+        <div class="view-label">${viewLabelText}</div>
+        ${showPeriodViews ? `<div class="view-delta zero">(total: ${totalViews})</div>` : ''}
+      </div>
+      <div class="video-dates">
+        <div class="date-item"><span class="date-icon">➕</span> Ajouté: ${addedDate}</div>
+        <div class="date-item"><span class="date-icon">📅</span> Publié: ${publishDate ? fmtDate(publishDate) : '—'}</div>
+      </div>
+      <div class="video-actions">
+        <button class="btn-icon" title="Retirer du suivi" onclick="confirmDelete('${v.id}','${v.video_id}',this)">✕</button>
+      </div>
+    </div>`;
+  }).join('');
+
+  container.innerHTML = `<div class="video-list">${rows}</div>`;
+}
+
+// ─── IMPORT EN MASSE ─────────────────────────────────────────────────────────
+function openImport() {
+  const ov = document.getElementById('import-overlay');
+  ov.style.display = 'flex';
+  document.getElementById('import-input-area').style.display = 'flex';
+  document.getElementById('import-progress-area').style.display = 'none';
+  document.getElementById('importTextarea').value = '';
+  document.getElementById('import-parse-info').textContent = '';
+  document.getElementById('importStartBtn').disabled = true;
+  document.getElementById('importStartBtn').style.opacity = '0.4';
+  document.getElementById('importDoneBtn').style.display = 'none';
+  document.getElementById('import-log').innerHTML = '';
+}
+
+function closeImport() {
+  document.getElementById('import-overlay').style.display = 'none';
+}
+
+function parseImportUrls() {
+  const raw = document.getElementById('importTextarea').value;
+  const lines = raw.split(/[\n\r,; \t]+/).map(l=>l.trim()).filter(Boolean);
+  const valid = lines.filter(l => extractVideoId(l));
+  const invalid = lines.length - valid.length;
+  const existing = valid.filter(url => allVideos.find(v=>v.video_id===extractVideoId(url)));
+  const newUrls = valid.filter(url => !allVideos.find(v=>v.video_id===extractVideoId(url)));
+  const dupes = valid.length - new Set(valid.map(u=>extractVideoId(u))).size;
+
+  let info = '';
+  if (!lines.length) { info = ''; }
+  else {
+    info = `<span style="color:var(--success)">${newUrls.length} nouvelles</span>`;
+    if (existing.length) info += `  •  <span style="color:var(--warning)">${existing.length} déjà enregistrées (ignorées)</span>`;
+    if (dupes) info += `  •  <span style="color:var(--text-muted)">${dupes} doublons internes</span>`;
+    if (invalid) info += `  •  <span style="color:var(--error)">${invalid} invalides</span>`;
+  }
+  document.getElementById('import-parse-info').innerHTML = info;
+  const btn = document.getElementById('importStartBtn');
+  btn.disabled = newUrls.length === 0;
+  btn.style.opacity = newUrls.length > 0 ? '1' : '0.4';
+}
+
+async function startImport() {
+  const raw = document.getElementById('importTextarea').value;
+  const lines = raw.split(/[\n\r,; \t]+/).map(l=>l.trim()).filter(Boolean);
+  const valid = lines.filter(l => extractVideoId(l));
+  // Deduplicate & filter already existing
+  const seen = new Set();
+  const toImport = [];
+  for (const url of valid) {
+    const vid = extractVideoId(url);
+    if (!seen.has(vid) && !allVideos.find(v=>v.video_id===vid)) {
+      seen.add(vid);
+      toImport.push({ url, videoId: vid });
+    }
+  }
+
+  if (!toImport.length) { closeImport(); return; }
+
+  // Switch to progress view
+  document.getElementById('import-input-area').style.display = 'none';
+  const prog = document.getElementById('import-progress-area');
+  prog.style.display = 'flex';
+  prog.style.flexDirection = 'column';
+
+  const log = document.getElementById('import-log');
+  const bar = document.getElementById('import-progress-bar');
+  const countEl = document.getElementById('import-count-text');
+  const statusEl = document.getElementById('import-status-text');
+  log.innerHTML = '';
+
+  let done=0, success=0, skipped=0, errors=0;
+  const total = toImport.length;
+  const today = todayFR();
+
+  // Process in batches of 50 for YT API
+  for (let i=0; i<toImport.length; i+=50) {
+    const batch = toImport.slice(i, i+50);
+    const ids = batch.map(b=>b.videoId);
+    statusEl.textContent = `Récupération des infos YouTube...`;
+    const ytMap = await fetchYTStats(ids);
+
+    for (const item of batch) {
+      const info = ytMap[item.videoId];
+      done++;
+      bar.style.width = Math.round((done/total)*100)+'%';
+      countEl.textContent = `${done} / ${total}`;
+
+      if (!info) {
+        errors++;
+        log.innerHTML += `<div style="color:var(--error)">✕  ${item.url.slice(0,60)}...  <span style="opacity:0.6">(introuvable)</span></div>`;
+        continue;
+      }
+
+      const res = await sbPost('videos', { url:item.url, video_id:item.videoId, title:info.title, is_deleted:false, published_at:info.publishedAt||null });
+      if (res.status===201) {
+        await sbPost('stats_history', { video_id:item.videoId, view_count:info.views, recorded_at:today });
+        success++;
+        log.innerHTML += `<div style="color:var(--success)">✓  <span style="color:var(--text)">${info.title.slice(0,55)}${info.title.length>55?'…':''}</span>  <span style="color:var(--text-muted)">${fmt(info.views)} vues</span></div>`;
+      } else {
+        errors++;
+        log.innerHTML += `<div style="color:var(--error)">✕  ${item.url.slice(0,60)}  <span style="opacity:0.6">(erreur DB)</span></div>`;
+      }
+      // Auto scroll log
+      log.scrollTop = log.scrollHeight;
+    }
+  }
+
+  bar.style.width = '100%';
+  bar.style.background = errors > 0 ? 'var(--warning)' : 'var(--success)';
+  statusEl.textContent = `Import terminé`;
+  countEl.textContent = `${success} importées · ${errors} erreurs`;
+  document.getElementById('importDoneBtn').style.display = 'inline-block';
+}
+
+function finishImport() {
+  closeImport();
+  loadVideos();
+}
+
+// Close modal on overlay click
+document.getElementById('import-overlay').addEventListener('click', e => {
+  if (e.target === document.getElementById('import-overlay')) closeImport();
+});
+
+// ─── ADD VIDEO ───────────────────────────────────────────────────────────────
+async function addVideo() {
+  const input = document.getElementById('urlInput');
+  const url = input.value.trim();
+  if (!url) return;
+  const videoId = extractVideoId(url);
+  if (!videoId) { toast('URL YouTube invalide', 'error'); return; }
+
+  const btn = document.getElementById('addBtn');
+  btn.disabled=true; btn.textContent='...';
+
+  if (allVideos.find(v=>v.video_id===videoId)) {
+    toast('⚠️ Cette vidéo est déjà enregistrée !', 'warning');
+    btn.disabled=false; btn.textContent='+ Ajouter'; return;
+  }
+
+  const ytData = await fetchYTStats([videoId]);
+  const info = ytData[videoId];
+  if (!info) { toast('Vidéo introuvable sur YouTube','error'); btn.disabled=false; btn.textContent='+ Ajouter'; return; }
+
+  const res = await sbPost('videos', { url, video_id:videoId, title:info.title, is_deleted:false, published_at:info.publishedAt });
+  if (res.status===201) {
+    await sbPost('stats_history', { video_id:videoId, view_count:info.views, recorded_at:todayFR() });
+    toast(`✓ "${info.title}" ajoutée !`, 'success');
+    input.value='';
+    await loadVideos();
+  } else {
+    toast("Erreur lors de l'ajout",'error');
+  }
+  btn.disabled=false; btn.textContent='+ Ajouter';
+}
+
+// ─── DELETE VIDEO ─────────────────────────────────────────────────────────────
+let _deleteId = null, _deleteVideoId = null;
+
+function confirmDelete(id, videoId, btnEl) {
+  _deleteId = id; _deleteVideoId = videoId;
+  // Get title from nearest video-title element
+  const item = btnEl.closest('.video-item');
+  const titleEl = item ? item.querySelector('.video-title') : null;
+  const title = titleEl ? titleEl.textContent.trim() : '';
+  document.getElementById('delete-video-title').textContent = title;
+  const ov = document.getElementById('delete-overlay');
+  ov.style.display = 'flex';
+}
+
+function closeDeleteModal() {
+  document.getElementById('delete-overlay').style.display = 'none';
+  _deleteId = null; _deleteVideoId = null;
+}
+
+async function executeDelete() {
+  if (!_deleteId) return;
+  const btn = document.getElementById('delete-confirm-btn');
+  btn.disabled = true; btn.textContent = '...';
+  await sbDelete('stats_history', `video_id=eq.${_deleteVideoId}`);
+  await sbDelete('videos', `id=eq.${_deleteId}`);
+  closeDeleteModal();
+  toast('Vidéo retirée du suivi', 'success');
+  await loadVideos();
+}
+
+// Close on overlay click
+document.getElementById('delete-overlay').addEventListener('click', e => {
+  if (e.target === document.getElementById('delete-overlay')) closeDeleteModal();
+});
+
+// ─── REFRESH ─────────────────────────────────────────────────────────────────
+async function manualRefresh() {
+  const btn = document.getElementById('main-refresh-btn');
+  const icon = document.getElementById('refresh-icon');
+  btn.disabled = true;
+  icon.style.animation = 'spin 0.7s linear infinite';
+  btn.style.opacity = '0.7';
+  await refreshAllStats();
+  btn.disabled = false;
+  icon.style.animation = '';
+  btn.style.opacity = '1';
+}
+
+async function refreshAllStats() {
+  if (!allVideos.length) return;
+  toast('Actualisation en cours...', 'success');
+  const today = todayFR();
+  const ytMap = {};
+  for (let i=0; i<allVideos.length; i+=50) {
+    Object.assign(ytMap, await fetchYTStats(allVideos.slice(i,i+50).map(v=>v.video_id)));
+  }
+  for (const v of allVideos) {
+    const views = ytMap[v.video_id]?.views;
+    if (views !== undefined) {
+      const ex = await sbGet('stats_history', `video_id=eq.${v.video_id}&recorded_at=eq.${today}`);
+      if (ex.length>0) await sbPatch('stats_history', `video_id=eq.${v.video_id}&recorded_at=eq.${today}`, {view_count:views});
+      else await sbPost('stats_history', {video_id:v.video_id, view_count:views, recorded_at:today});
+    }
+  }
+  await loadVideos();
+  toast('✓ Stats mises à jour !', 'success');
+}
+
+// ─── LOAD STATS ───────────────────────────────────────────────────────────────
+async function loadStats(dateStr) {
+  selectedDate = dateStr || todayFR();
+  statsPage = 1;
+  await buildHistoryNav();
+  document.getElementById('today-label').textContent = `Bilan du ${fmtDate(selectedDate)}`;
+  document.getElementById('stats-table-container').innerHTML = '<div class="loading"><div class="spinner"></div> Chargement...</div>';
+
+  const prev = prevDay(selectedDate);
+  const [dayStats, prevStats, videos] = await Promise.all([
+    sbGet('stats_history', `recorded_at=eq.${selectedDate}`),
+    sbGet('stats_history', `recorded_at=eq.${prev}`),
+    sbGet('videos', 'order=added_at.desc')
+  ]);
+  const dm={}, pm={};
+  dayStats.forEach(s=>dm[s.video_id]=s.view_count);
+  prevStats.forEach(s=>pm[s.video_id]=s.view_count);
+
+  let totalViews=0, totalDelta=0;
+  statsDataCache = videos.map(v => {
+    const dv=dm[v.video_id]||0, pv=pm[v.video_id]||0, delta=dv-pv;
+    totalViews+=dv; if(delta>0) totalDelta+=delta;
+    return { title:v.title||v.url, dv, pv, delta, is_deleted:v.is_deleted };
+  });
+
+  document.getElementById('stat-total-views').textContent = fmt(totalViews);
+  document.getElementById('stat-today-delta').textContent = totalDelta>0 ? `+${fmt(totalDelta)}` : '—';
+  document.getElementById('stat-video-count').textContent = videos.length;
+
+  renderStatsTable();
+}
+
+function setStatsSort(s, btn) {
+  statsSort = s;
+  statsPage = 1;
+  document.querySelectorAll('#panel-stats .sort-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  renderStatsTable();
+}
+
+function goToStatsPage(p) {
+  statsPage = p;
+  renderStatsTable();
+  document.getElementById('stats-table-container').scrollIntoView({behavior:'smooth',block:'start'});
+}
+
+function renderStatsTable() {
+  const q = (document.getElementById('statsSearch')?.value||'').toLowerCase();
+  const pp = parseInt(document.getElementById('stats-perpage')?.value||50);
+
+  // Filter
+  let rows = statsDataCache.filter(r => r.title.toLowerCase().includes(q));
+
+  // Sort
+  rows = [...rows].sort((a,b)=>{
+    if (statsSort==='title') return a.title.localeCompare(b.title, 'fr', {sensitivity:'base'});
+    if (statsSort==='views-desc') return b.dv - a.dv;
+    if (statsSort==='views-asc') return a.dv - b.dv;
+    if (statsSort==='delta-desc') return b.delta - a.delta;
+    if (statsSort==='delta-asc') return a.delta - b.delta;
+    return 0;
+  });
+
+  const total = rows.length;
+  const totalPages = Math.max(1, Math.ceil(total / pp));
+  if (statsPage > totalPages) statsPage = totalPages;
+  const start = (statsPage-1)*pp, end = Math.min(start+pp, total);
+  const pageRows = rows.slice(start, end);
+
+  const container = document.getElementById('stats-table-container');
+  if (!total) {
+    container.innerHTML = `<div class="empty-state"><div class="big">📊</div>Aucune vidéo trouvée.</div>`;
+    document.getElementById('stats-pagination-bar').style.display = 'none';
+    return;
+  }
+
+  const tbody = pageRows.map(r => {
+    const dHtml = r.delta>0 ? `<span class="delta-pos">+${fmt(r.delta)}</span>`
+      : r.delta<0 ? `<span class="delta-neg">${fmt(r.delta)}</span>`
+      : `<span class="delta-zero">—</span>`;
+    const tag = r.is_deleted ? ` <span style="color:var(--error);font-size:0.62rem">⚠</span>` : '';
+    const rowStyle = r.is_deleted ? 'opacity:0.6;' : '';
+    return `<tr style="${rowStyle}">
+      <td style="font-family:'Syne',sans-serif;font-weight:600;max-width:400px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${r.title}${tag}</td>
+      <td style="text-align:right;font-family:'Syne',sans-serif;font-weight:700;">${fmt(r.dv)}</td>
+      <td style="text-align:right">${dHtml}</td>
+    </tr>`;
+  }).join('');
+
+  container.innerHTML = `<table class="summary-table">
+    <thead><tr>
+      <th>Vidéo <span style="color:var(--text-muted);font-weight:400">(${total} résultats)</span></th>
+      <th style="text-align:right;cursor:pointer;" onclick="setStatsSort('views-desc',document.getElementById('st-views-desc'))">Vues ${statsSort==='views-desc'?'↓':statsSort==='views-asc'?'↑':'↕'}</th>
+      <th style="text-align:right;cursor:pointer;" onclick="setStatsSort('delta-desc',document.getElementById('st-delta-desc'))">Nouvelles vues ${statsSort==='delta-desc'?'↓':statsSort==='delta-asc'?'↑':'↕'}</th>
+    </tr></thead>
+    <tbody>${tbody}</tbody>
+  </table>`;
+
+  // Pagination
+  const pbar = document.getElementById('stats-pagination-bar');
+  const pinfo = document.getElementById('stats-pagination-info');
+  const pcontrols = document.getElementById('stats-pagination-controls');
+  pbar.style.display = total > pp ? 'flex' : 'none';
+  pinfo.textContent = `${start+1}–${end} sur ${total}`;
+
+  let btns = `<button class="page-btn" ${statsPage===1?'disabled':''} onclick="goToStatsPage(${statsPage-1})">‹</button>`;
+  for (const p of buildPageRange(statsPage, totalPages)) {
+    if (p==='...') btns += `<span class="page-ellipsis">…</span>`;
+    else btns += `<button class="page-btn ${p===statsPage?'active':''}" onclick="goToStatsPage(${p})">${p}</button>`;
+  }
+  btns += `<button class="page-btn" ${statsPage===totalPages?'disabled':''} onclick="goToStatsPage(${statsPage+1})">›</button>`;
+  pcontrols.innerHTML = btns;
+}
+
+let calYear = new Date().getFullYear();
+let calMonth = new Date().getMonth(); // 0-based
+let statsAvailableDates = new Set();
+
+async function buildHistoryNav() {
+  const all = await sbGet('stats_history', 'select=recorded_at&order=recorded_at.desc');
+  const unique = [...new Set(all.map(r=>r.recorded_at))];
+  statsAvailableDates = new Set(unique);
+
+  // Update quick buttons active state
+  const today = todayFR();
+  const yesterday = prevDay(today);
+  const beforeYesterday = prevDay(yesterday);
+  document.getElementById('qd-today').classList.toggle('active', selectedDate===today);
+  document.getElementById('qd-yesterday').classList.toggle('active', selectedDate===yesterday);
+  document.getElementById('qd-before').classList.toggle('active', selectedDate===beforeYesterday);
+
+  // Hide history-nav (we replaced it with quick buttons)
+  const nav = document.getElementById('history-nav');
+  nav.innerHTML = '';
+}
+
+function toggleStatsCal() {
+  const dd = document.getElementById('stats-cal-dropdown');
+  const isOpen = dd.style.display !== 'none';
+  dd.style.display = isOpen ? 'none' : 'block';
+  if (!isOpen) renderCalendar();
+}
+
+function renderCalendar() {
+  const monthNames = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
+  document.getElementById('cal-month-label').textContent = `${monthNames[calMonth]} ${calYear}`;
+
+  const grid = document.getElementById('cal-grid');
+  const today = todayFR();
+
+  // First day of month (0=Sun, adjust to Mon-first)
+  const firstDay = new Date(calYear, calMonth, 1).getDay();
+  const offset = (firstDay === 0) ? 6 : firstDay - 1;
+  const daysInMonth = new Date(calYear, calMonth+1, 0).getDate();
+
+  let cells = '';
+  // Empty cells
+  for (let i=0; i<offset; i++) cells += `<div></div>`;
+  // Day cells
+  for (let d=1; d<=daysInMonth; d++) {
+    const dateStr = `${calYear}-${String(calMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const isToday = dateStr === today;
+    const isSelected = dateStr === selectedDate;
+    const hasData = statsAvailableDates.has(dateStr);
+    const isFuture = dateStr > today;
+
+    let style = 'text-align:center;padding:5px 2px;border-radius:3px;font-size:0.72rem;cursor:pointer;';
+    let cls = '';
+    if (isFuture) {
+      style += 'color:var(--text-muted);cursor:not-allowed;opacity:0.3;';
+    } else if (isSelected) {
+      style += 'background:var(--accent);color:white;font-weight:700;';
+    } else if (isToday) {
+      style += 'border:1px solid var(--warning);color:var(--warning);';
+    } else if (hasData) {
+      style += 'background:var(--surface2);color:var(--text);border:1px solid var(--border);';
+    } else {
+      style += 'color:var(--text-muted);';
+    }
+
+    const onclick = isFuture ? '' : `onclick="selectCalDate('${dateStr}')"`;
+    cells += `<div style="${style}" ${onclick} title="${dateStr}">${d}</div>`;
+  }
+
+  grid.innerHTML = cells;
+}
+
+function selectCalDate(d) {
+  document.getElementById('stats-cal-dropdown').style.display = 'none';
+  loadStats(d);
+}
+
+function calPrevMonth() {
+  calMonth--;
+  if (calMonth < 0) { calMonth=11; calYear--; }
+  renderCalendar();
+}
+
+function calNextMonth() {
+  calMonth++;
+  if (calMonth > 11) { calMonth=0; calYear++; }
+  renderCalendar();
+}
+
+// Close calendar on outside click
+document.addEventListener('click', e => {
+  const wrap = document.getElementById('cal-wrap');
+  if (wrap && !wrap.contains(e.target)) {
+    document.getElementById('stats-cal-dropdown').style.display = 'none';
+  }
+});
+
+// ─── MIDNIGHT SNAPSHOT ───────────────────────────────────────────────────────
+// Note: the Supabase Edge Function also handles deleted_at via the cron job
+async function checkMidnightSnapshot() {
+  const parisNow = new Date().toLocaleString('en-US', {timeZone:'Europe/Paris'});
+  const pd = new Date(parisNow);
+  if (pd.getHours()===0 && pd.getMinutes()<5) {
+    const key = 'lastSnapshot_'+todayFR();
+    if (!localStorage.getItem(key)) {
+      localStorage.setItem(key, '1');
+      await refreshAllStats();
+      toast('📸 Snapshot automatique minuit effectué !', 'success');
+    }
+  }
+}
+setInterval(checkMidnightSnapshot, 60000);
+
+// (old date picker removed)
+
+document.getElementById('urlInput').addEventListener('keydown', e => { if(e.key==='Enter') addVideo(); });
+
+// ─── STATUS PANEL ────────────────────────────────────────────────────────────
+let statusFilter = 'all';
+let statusVideosCache = [];
+let statusPage = 1;
+
+function setStatusFilter(f, btn) {
+  statusFilter = f;
+  statusPage = 1;
+  document.querySelectorAll('#panel-status .sort-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderStatusPanel();
+}
+
+async function loadStatusPanel() {
+  document.getElementById('status-list-container').innerHTML = '<div class="loading"><div class="spinner"></div> Chargement...</div>';
+  
+  // Reload videos from DB to get latest deleted_at
+  const videos = await sbGet('videos', 'order=deleted_at.desc.nullslast,added_at.desc');
+  statusVideosCache = videos || [];
+  
+  // Update deleted_at for newly deleted videos that don't have it yet
+  const today = todayFR();
+  for (const v of statusVideosCache) {
+    if (v.is_deleted && !v.deleted_at) {
+      await sbPatch('videos', `id=eq.${v.id}`, { deleted_at: today });
+      v.deleted_at = today;
+    }
+  }
+
+  // Update badge on tab
+  const deletedCount = statusVideosCache.filter(v => v.is_deleted).length;
+  const badge = document.getElementById('status-badge');
+  if (deletedCount > 0) {
+    badge.style.display = 'inline';
+    badge.textContent = deletedCount;
+  } else {
+    badge.style.display = 'none';
+  }
+
+  renderStatusPanel();
+}
+
+function renderStatusPanel(resetPage=false) {
+  if (resetPage) statusPage = 1;
+  const q = (document.getElementById('status-search')?.value || '').toLowerCase();
+  const today = todayFR();
+  const thisMonth = today.slice(0, 7);
+
+  // Stats (always on full list)
+  const onlineCount = statusVideosCache.filter(v => !v.is_deleted).length;
+  const deletedAll = statusVideosCache.filter(v => v.is_deleted);
+  const deletedThisMonth = deletedAll.filter(v => v.deleted_at && v.deleted_at.startsWith(thisMonth)).length;
+  document.getElementById('st-online-count').textContent = onlineCount;
+  document.getElementById('st-deleted-count').textContent = deletedAll.length;
+  document.getElementById('st-recent-count').textContent = deletedThisMonth;
+
+  // Filter
+  let videos = statusVideosCache.filter(v => {
+    const title = (v.title || v.url).toLowerCase();
+    const matchQ = !q || title.includes(q);
+    const matchF = statusFilter === 'all' || (statusFilter === 'deleted' && v.is_deleted) || (statusFilter === 'online' && !v.is_deleted);
+    return matchQ && matchF;
+  });
+
+  const container = document.getElementById('status-list-container');
+  if (!videos.length) {
+    container.innerHTML = `<div class="empty-state"><div class="big">✅</div>Aucune vidéo correspondante.</div>`;
+    document.getElementById('status-pagination-bar').style.display = 'none';
+    return;
+  }
+
+  // Pagination
+  const pp = parseInt(document.getElementById('status-perpage')?.value || 50);
+  const total = videos.length;
+  const totalPages = Math.max(1, Math.ceil(total / pp));
+  if (statusPage > totalPages) statusPage = totalPages;
+  const start = (statusPage - 1) * pp;
+  const end = Math.min(start + pp, total);
+  const pageVideos = videos.slice(start, end);
+
+  const rows = pageVideos.map(v => {
+    const del = v.is_deleted;
+    const statusDot = del
+      ? `<div style="width:10px;height:10px;border-radius:50%;background:var(--error);box-shadow:0 0 6px var(--error);flex-shrink:0;"></div>`
+      : `<div style="width:10px;height:10px;border-radius:50%;background:var(--success);box-shadow:0 0 6px var(--success);flex-shrink:0;"></div>`;
+    const statusLabel = del
+      ? `<span style="color:var(--error);font-family:'Syne',sans-serif;font-weight:700;font-size:0.72rem;">SUPPRIMÉE</span>`
+      : `<span style="color:var(--success);font-family:'Syne',sans-serif;font-weight:700;font-size:0.72rem;">EN LIGNE</span>`;
+    const deletedInfo = del && v.deleted_at
+      ? `<div style="font-size:0.68rem;color:var(--error);margin-top:3px;">Détectée supprimée le ${fmtDate(v.deleted_at)}</div>`
+      : '';
+    const addedInfo = `<div style="font-size:0.68rem;color:var(--text-muted);">Ajoutée le ${fmtDate(v.added_at?.split('T')[0])}</div>`;
+    const title = v.title || v.url;
+    const rowBg = del ? 'rgba(255,23,68,0.04)' : 'var(--surface)';
+    const rowBorder = del ? 'border-left:3px solid var(--error);' : 'border-left:3px solid var(--success);';
+    return `<div style="display:grid;grid-template-columns:20px 1fr auto;align-items:center;gap:16px;padding:14px 18px;border-bottom:1px solid var(--border);background:${rowBg};${rowBorder}transition:background 0.15s;">
+      ${statusDot}
+      <div style="min-width:0;">
+        <div style="font-family:'Syne',sans-serif;font-weight:600;font-size:0.83rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;${del?'text-decoration:line-through;color:var(--text-dim);':''}" title="${title}">${title}</div>
+        <div style="font-size:0.68rem;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${v.url}</div>
+        ${addedInfo}${deletedInfo}
+      </div>
+      <div style="text-align:right;flex-shrink:0;">
+        ${statusLabel}
+        <div style="margin-top:4px;"><a href="${v.url}" target="_blank" rel="noopener" style="font-size:0.65rem;color:var(--text-muted);text-decoration:none;border:1px solid var(--border);padding:2px 8px;border-radius:2px;">Voir ↗</a></div>
+      </div>
+    </div>`;
+  }).join('');
+
+  container.innerHTML = `<div style="border:1px solid var(--border);border-radius:4px;overflow:hidden;">${rows}</div>`;
+
+  // Pagination bar
+  const pbar = document.getElementById('status-pagination-bar');
+  const pinfo = document.getElementById('status-pagination-info');
+  const pcontrols = document.getElementById('status-pagination-controls');
+  pbar.style.display = 'flex';
+  pinfo.textContent = `${start+1}–${end} sur ${total} vidéo${total>1?'s':''}`;
+
+  let btns = `<button class="page-btn" ${statusPage===1?'disabled':''} onclick="statusGoTo(${statusPage-1})">‹</button>`;
+  for (const p of buildPageRange(statusPage, totalPages)) {
+    if (p==='...') btns += `<span class="page-ellipsis">…</span>`;
+    else btns += `<button class="page-btn ${p===statusPage?'active':''}" onclick="statusGoTo(${p})">${p}</button>`;
+  }
+  btns += `<button class="page-btn" ${statusPage===totalPages?'disabled':''} onclick="statusGoTo(${statusPage+1})">›</button>`;
+  pcontrols.innerHTML = btns;
+}
+
+function statusGoTo(p) {
+  statusPage = p;
+  renderStatusPanel();
+  document.getElementById('status-list-container').scrollIntoView({behavior:'smooth', block:'start'});
+}
+
+// ─── ANALYTICS ───────────────────────────────────────────────────────────────
+let analyticsDays = 14;
+let analyticsView = 'line';
+let analyticsData = 'delta';
+let analyticsChart = null;
+let anCustomStart = null;  // YYYY-MM-DD
+let anCustomEnd = null;
+let anCustomStep = 0;      // 0=none, 1=start picked
+let anCalYear = new Date().getFullYear();
+let anCalMonth = new Date().getMonth();
+let anUseCustom = false;
+
+function setAnalyticsPeriod(days, btn) {
+  anUseCustom = false;
+  analyticsDays = days;
+  anCustomStart = null; anCustomEnd = null; anCustomStep = 0;
+  ['an-p7','an-p14','an-p30','an-p90','an-pcustom'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.classList.remove('active');
+  });
+  btn.classList.add('active');
+  document.getElementById('an-period-label').style.display = 'none';
+  renderAnalytics();
+}
+
+function toggleAnCal() {
+  const dd = document.getElementById('an-cal-dropdown');
+  const isOpen = dd.style.display !== 'none';
+  dd.style.display = isOpen ? 'none' : 'block';
+  if (!isOpen) renderAnCalendar();
+}
+
+function renderAnCalendar() {
+  const monthNames = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
+  document.getElementById('an-cal-month-label').textContent = `${monthNames[anCalMonth]} ${anCalYear}`;
+  const grid = document.getElementById('an-cal-grid');
+  const today = todayFR();
+  const firstDay = new Date(anCalYear, anCalMonth, 1).getDay();
+  const offset = firstDay === 0 ? 6 : firstDay - 1;
+  const daysInMonth = new Date(anCalYear, anCalMonth+1, 0).getDate();
+
+  let cells = '';
+  for (let i=0; i<offset; i++) cells += '<div></div>';
+  for (let d=1; d<=daysInMonth; d++) {
+    const ds = `${anCalYear}-${String(anCalMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const isFuture = ds > today;
+    const isToday = ds === today;
+    const isStart = ds === anCustomStart;
+    const isEnd = ds === anCustomEnd;
+    const inRange = anCustomStart && anCustomEnd && ds > anCustomStart && ds < anCustomEnd;
+
+    let bg='transparent', color='var(--text-dim)', border='none', fw='400';
+    if (isFuture) { color='var(--text-muted)'; }
+    else if (isStart || isEnd) { bg='var(--accent)'; color='white'; fw='700'; }
+    else if (inRange) { bg='rgba(255,61,0,0.18)'; color='var(--text)'; }
+    else if (isToday) { border='1px solid var(--warning)'; color='var(--warning)'; }
+    else { color='var(--text)'; }
+
+    const onclick = isFuture ? '' : `onclick="anClickDay('${ds}')"`;
+    cells += `<div style="text-align:center;padding:5px 2px;border-radius:3px;font-size:0.72rem;cursor:${isFuture?'not-allowed':'pointer'};background:${bg};color:${color};border:${border};font-weight:${fw};" ${onclick}>${d}</div>`;
+  }
+  grid.innerHTML = cells;
+
+  // Info text
+  const info = document.getElementById('an-range-info');
+  if (!anCustomStart) info.textContent = '';
+  else if (anCustomStart && !anCustomEnd) info.textContent = `Début: ${fmtDate(anCustomStart)}`;
+  else info.textContent = `${fmtDate(anCustomStart)} → ${fmtDate(anCustomEnd)}`;
+
+  // Apply button
+  const btn = document.getElementById('an-apply-btn');
+  btn.disabled = !anCustomStart;
+  btn.style.opacity = anCustomStart ? '1' : '0.4';
+  if (anCustomStart && !anCustomEnd) btn.textContent = 'Appliquer (depuis ce jour)';
+  else if (anCustomStart && anCustomEnd) btn.textContent = 'Appliquer la plage';
+  else btn.textContent = 'Appliquer';
+}
+
+function anClickDay(ds) {
+  if (anCustomStep === 0 || anCustomStep === 2) {
+    anCustomStart = ds; anCustomEnd = null; anCustomStep = 1;
+  } else {
+    if (ds < anCustomStart) { anCustomEnd = anCustomStart; anCustomStart = ds; }
+    else { anCustomEnd = ds; }
+    anCustomStep = 2;
+  }
+  renderAnCalendar();
+}
+
+function anCalPrev() { anCalMonth--; if(anCalMonth<0){anCalMonth=11;anCalYear--;} renderAnCalendar(); }
+function anCalNext() { anCalMonth++; if(anCalMonth>11){anCalMonth=0;anCalYear++;} renderAnCalendar(); }
+
+function anSetPreset(p) {
+  const today = todayFR();
+  if (p==='week') {
+    const d = new Date(); const dow = d.getDay()||7;
+    d.setDate(d.getDate()-dow+1);
+    anCustomStart = d.toLocaleDateString('fr-CA',{timeZone:'Europe/Paris'});
+    anCustomEnd = today;
+  } else if (p==='month') {
+    anCustomStart = today.slice(0,7)+'-01';
+    anCustomEnd = today;
+  } else if (p==='lastmonth') {
+    const d = new Date(); d.setDate(1); d.setMonth(d.getMonth()-1);
+    const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,'0');
+    const lastDay = new Date(y,d.getMonth()+1,0).getDate();
+    anCustomStart = `${y}-${m}-01`; anCustomEnd = `${y}-${m}-${lastDay}`;
+  }
+  anCustomStep = 2;
+  renderAnCalendar();
+}
+
+function anCalReset() {
+  anCustomStart=null; anCustomEnd=null; anCustomStep=0;
+  anUseCustom=false;
+  document.getElementById('an-cal-dropdown').style.display='none';
+  ['an-p7','an-p14','an-p30','an-p90','an-pcustom'].forEach(id => {
+    const el=document.getElementById(id); if(el) el.classList.remove('active');
+  });
+  document.getElementById('an-p14').classList.add('active');
+  analyticsDays=14;
+  document.getElementById('an-period-label').style.display='none';
+  renderAnalytics();
+}
+
+function anApplyRange() {
+  if (!anCustomStart) return;
+  if (!anCustomEnd) anCustomEnd = todayFR();
+  anUseCustom = true;
+  ['an-p7','an-p14','an-p30','an-p90'].forEach(id => {
+    const el=document.getElementById(id); if(el) el.classList.remove('active');
+  });
+  document.getElementById('an-pcustom').classList.add('active');
+  document.getElementById('an-cal-label').textContent = anCustomEnd && anCustomEnd!==anCustomStart
+    ? `${fmtDate(anCustomStart)} → ${fmtDate(anCustomEnd)}`
+    : fmtDate(anCustomStart);
+  document.getElementById('an-cal-dropdown').style.display='none';
+  const lbl = document.getElementById('an-period-label');
+  lbl.style.display='inline-flex';
+  lbl.textContent = `📅 ${anCustomEnd && anCustomEnd!==anCustomStart ? fmtDate(anCustomStart)+' → '+fmtDate(anCustomEnd) : 'Depuis le '+fmtDate(anCustomStart)}`;
+  renderAnalytics();
+}
+
+// Close on outside click
+document.addEventListener('click', e => {
+  const wrap = document.getElementById('an-cal-wrap');
+  if (wrap && !wrap.contains(e.target)) document.getElementById('an-cal-dropdown').style.display='none';
+});
+
+function setAnalyticsView(view, btn) {
+  analyticsView = view;
+  document.getElementById('an-view-line').classList.toggle('active', view==='line');
+  document.getElementById('an-view-bar').classList.toggle('active', view==='bar');
+  renderAnalytics();
+}
+
+function setAnalyticsData(data, btn) {
+  analyticsData = data;
+  document.getElementById('an-data-delta').classList.toggle('active', data==='delta');
+  document.getElementById('an-data-total').classList.toggle('active', data==='total');
+  renderAnalytics();
+}
+
+async function loadAnalytics() {
+  document.getElementById('analytics-loading').style.display = 'flex';
+  // Always reload fresh from Supabase
+  await reloadStatsCache();
+  renderAnalytics();
+}
+
+async function reloadStatsCache() {
+  const allStats = await sbGet('stats_history', 'select=video_id,view_count,recorded_at&order=recorded_at.asc');
+  statsCache = {};
+  allHistoryDates = [];
+  const dateSet = new Set();
+  allStats.forEach(s => {
+    if (!statsCache[s.recorded_at]) statsCache[s.recorded_at] = {};
+    statsCache[s.recorded_at][s.video_id] = s.view_count;
+    dateSet.add(s.recorded_at);
+  });
+  allHistoryDates = [...dateSet].sort((a,b) => b.localeCompare(a));
+}
+
+function renderAnalytics() {
+  const today = todayFR();
+  
+  // Build days array — either custom range or last N days
+  const days = [];
+  if (anUseCustom && anCustomStart) {
+    // Build date range from anCustomStart to anCustomEnd
+    const end = anCustomEnd || today;
+    let cur = new Date(anCustomStart + 'T12:00:00Z');
+    const endD = new Date(end + 'T12:00:00Z');
+    while (cur <= endD) {
+      days.push(cur.toISOString().split('T')[0]);
+      cur.setDate(cur.getDate() + 1);
+    }
+  } else {
+    for (let i = analyticsDays - 1; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      days.push(d.toLocaleDateString('fr-CA', { timeZone: 'Europe/Paris' }));
+    }
+  }
+
+  // For each day compute total views across all videos
+  const dayTotals = {}; // date -> total views
+  const sortedAvailDates = [...allHistoryDates].sort(); // asc
+  for (const date of sortedAvailDates) {
+    let sum = 0;
+    for (const vid of Object.keys(statsCache[date] || {})) {
+      sum += statsCache[date][vid] || 0;
+    }
+    dayTotals[date] = sum;
+  }
+
+  // Compute deltas ONLY between consecutive available snapshots
+  // Then spread the delta across the gap days proportionally
+  const deltas = {}; // date -> new views that day
+  for (let i = 1; i < sortedAvailDates.length; i++) {
+    const cur = sortedAvailDates[i];
+    const prv = sortedAvailDates[i-1];
+    const rawDelta = Math.max(0, (dayTotals[cur]||0) - (dayTotals[prv]||0));
+    
+    // Count how many calendar days between prv and cur
+    const curD = new Date(cur + 'T12:00:00Z');
+    const prvD = new Date(prv + 'T12:00:00Z');
+    const gapDays = Math.round((curD - prvD) / 86400000); // 1 or more
+    
+    if (gapDays <= 1) {
+      // Normal consecutive days
+      deltas[cur] = rawDelta;
+    } else {
+      // Gap: spread delta evenly across missing days
+      const perDay = Math.round(rawDelta / gapDays);
+      for (let g = 1; g <= gapDays; g++) {
+        const gd = new Date(prvD);
+        gd.setDate(gd.getDate() + g);
+        const gdStr = gd.toISOString().split('T')[0];
+        deltas[gdStr] = perDay;
+      }
+    }
+  }
+
+  // Auto-detect spike threshold: only exclude MASSIVE import spikes (50x median)
+  const deltaValues = Object.values(deltas).filter(v => v > 0);
+  deltaValues.sort((a,b) => a-b);
+  const median = deltaValues[Math.floor(deltaValues.length / 2)] || 0;
+  const spikeThreshold = Math.max(median * 50, 50000); // very high threshold
+
+  // Build chart data for selected period
+  const labels = [];
+  const values = [];
+  const spikes = [];
+
+  for (const d of days) {
+    const label = fmtDate(d);
+    labels.push(label);
+    
+    if (analyticsData === 'delta') {
+      const delta = deltas[d] || 0;
+      const isSpike = delta > spikeThreshold;
+      spikes.push(isSpike);
+      values.push(isSpike ? null : delta); // null = gap in chart
+    } else {
+      spikes.push(false);
+      values.push(dayTotals[d] || null);
+    }
+  }
+
+  // KPI calculations
+  const validValues = values.filter(v => v !== null && v > 0);
+  const periodSum = validValues.reduce((s,v) => s+v, 0);
+  const avgPerDay = validValues.length ? Math.round(periodSum / validValues.length) : 0;
+  
+  // Growth: compare first half vs second half
+  const half = Math.floor(validValues.length / 2);
+  const firstHalf = validValues.slice(0, half).reduce((s,v)=>s+v,0);
+  const secondHalf = validValues.slice(half).reduce((s,v)=>s+v,0);
+  let growth = firstHalf > 0 ? Math.round(((secondHalf - firstHalf) / firstHalf) * 100) : 0;
+
+  // Total views (current)
+  const totalViews = allVideos.reduce((s,v) => s + (v.yt?.views||0), 0);
+
+  // Update KPIs
+  document.getElementById('an-total').textContent = fmt(totalViews);
+  document.getElementById('an-period').textContent = fmt(periodSum);
+  document.getElementById('an-avg').textContent = fmt(avgPerDay);
+  const growthEl = document.getElementById('an-growth');
+  growthEl.textContent = growth > 0 ? `+${growth}%` : `${growth}%`;
+  growthEl.style.color = growth >= 0 ? 'var(--success)' : 'var(--error)';
+
+  // Render chart
+  renderChart(labels, values, spikes);
+
+  // Render daily table
+  renderAnalyticsTable(days, deltas, dayTotals, spikes, spikeThreshold);
+
+  document.getElementById('analytics-loading').style.display = 'none';
+}
+
+function renderChart(labels, values, spikes) {
+  const ctx = document.getElementById('analytics-chart').getContext('2d');
+  
+  if (analyticsChart) { analyticsChart.destroy(); analyticsChart = null; }
+
+  const pointColors = values.map((v, i) => v === null ? 'transparent' : 'var(--accent)');
+  
+  const dataset = {
+    label: analyticsData === 'delta' ? 'Nouvelles vues' : 'Vues cumulées',
+    data: values,
+    borderColor: '#ff3d00',
+    backgroundColor: analyticsView === 'bar' ? 'rgba(255,61,0,0.7)' : 'rgba(255,61,0,0.1)',
+    borderWidth: analyticsView === 'line' ? 2 : 0,
+    pointBackgroundColor: '#ff3d00',
+    pointRadius: analyticsView === 'line' ? 4 : 0,
+    pointHoverRadius: 6,
+    fill: analyticsView === 'line',
+    tension: 0.4,
+    spanGaps: false,
+  };
+
+  analyticsChart = new Chart(ctx, {
+    type: analyticsView === 'bar' ? 'bar' : 'line',
+    data: { labels, datasets: [dataset] },
+    options: {
+      responsive: true,
+      maintainAspectRatio: true,
+      aspectRatio: window.innerWidth < 600 ? 1.5 : 3,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: '#1a1a1a',
+          borderColor: '#2a2a2a',
+          borderWidth: 1,
+          titleColor: '#f0f0f0',
+          bodyColor: '#888',
+          callbacks: {
+            label: ctx => ctx.raw === null ? '⚠ Pic exclu' : fmt(ctx.raw) + ' vues',
+          }
+        }
+      },
+      scales: {
+        x: {
+          grid: { color: 'rgba(255,255,255,0.04)' },
+          ticks: { color: '#666', font: { family: 'DM Mono', size: 10 }, maxRotation: 45 }
+        },
+        y: {
+          grid: { color: 'rgba(255,255,255,0.04)' },
+          ticks: { color: '#666', font: { family: 'DM Mono', size: 10 }, callback: v => fmt(v) },
+          beginAtZero: true
+        }
+      }
+    }
+  });
+}
+
+function renderAnalyticsTable(days, deltas, dayTotals, spikes, spikeThreshold) {
+  const container = document.getElementById('analytics-table');
+  if (!days.length) { container.innerHTML = '<div class="empty-state"><div class="big">📈</div>Pas encore assez de données.</div>'; return; }
+
+  // Compute day-over-day growth %
+  const rows = [...days].reverse().map((d, i, arr) => {
+    const delta = deltas[d] || 0;
+    const isSpike = delta > spikeThreshold;
+    const prevDay = arr[i+1];
+    const prevDelta = prevDay ? (deltas[prevDay]||0) : 0;
+    const growth = prevDelta > 0 && !isSpike ? Math.round(((delta - prevDelta) / prevDelta) * 100) : null;
+    const total = dayTotals[d] || 0;
+
+    const spikeStyle = isSpike ? 'opacity:0.4;' : '';
+    const deltaStr = isSpike ? `<span style="color:var(--text-muted)">⚠ pic (${fmt(delta)})</span>` : `<span style="color:var(--success);font-weight:600">+${fmt(delta)}</span>`;
+    const growthStr = growth === null ? '<span style="color:var(--text-muted)">—</span>'
+      : growth > 0 ? `<span style="color:var(--success)">+${growth}%</span>`
+      : growth < 0 ? `<span style="color:var(--error)">${growth}%</span>`
+      : '<span style="color:var(--text-muted)">0%</span>';
+
+    return `<div style="display:grid;grid-template-columns:120px 1fr 1fr 1fr;align-items:center;padding:10px 18px;border-bottom:1px solid var(--border);font-size:0.78rem;${spikeStyle}">
+      <div style="font-family:'Syne',sans-serif;font-weight:600;">${fmtDate(d)}</div>
+      <div>${deltaStr}</div>
+      <div style="color:var(--text-dim);">${fmt(total)} total</div>
+      <div>${growthStr}</div>
+    </div>`;
+  }).join('');
+
+  container.innerHTML = `
+    <div style="display:grid;grid-template-columns:120px 1fr 1fr 1fr;padding:8px 18px;border-bottom:1px solid var(--border);">
+      <div style="font-size:0.6rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.1em;">Date</div>
+      <div style="font-size:0.6rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.1em;">Nouvelles vues</div>
+      <div style="font-size:0.6rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.1em;">Cumulé</div>
+      <div style="font-size:0.6rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.1em;">Croissance</div>
+    </div>
+    ${rows}`;
+}
+
+// INIT
+(async () => { await loadVideos(); })();
+</script>
+</body>
+</html>

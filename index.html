@@ -492,7 +492,7 @@
       <!-- SEARCH -->
       <div class="ctrl-group" style="margin-left:auto;">
         <div class="ctrl-label">Recherche</div>
-        <input class="search-input" id="searchInput" placeholder="Rechercher..." oninput="applyFilters()" />
+        <input class="search-input" id="searchInput" placeholder="Rechercher..." oninput="debouncedApplyFilters()" />
       </div>
 
     </div>
@@ -604,7 +604,7 @@
       </div>
       <div class="ctrl-group" style="margin-left:auto;">
         <div class="ctrl-label">Recherche</div>
-        <input class="search-input" id="statsSearch" placeholder="Rechercher une vidéo..." oninput="renderStatsTable()" />
+        <input class="search-input" id="statsSearch" placeholder="Rechercher une vidéo..." oninput="debouncedRenderStats()" />
       </div>
       <div style="display:flex;align-items:flex-end;gap:8px;">
         <span style="font-size:0.65rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.08em;align-self:center;">Par page</span>
@@ -634,7 +634,7 @@
         <div style="font-size:0.72rem;color:var(--text-muted);">Mis à jour automatiquement à minuit — vidéos supprimées détectées en rouge</div>
       </div>
       <div style="display:flex;gap:8px;align-items:center;">
-        <input class="search-input" id="status-search" placeholder="Rechercher..." oninput="renderStatusPanel()" style="width:200px;" />
+        <input class="search-input" id="status-search" placeholder="Rechercher..." oninput="debouncedRenderStatus()" style="width:200px;" />
         <div class="ctrl-btns">
           <button class="sort-btn active" id="st-filter-all" onclick="setStatusFilter('all',this)">Toutes</button>
           <button class="sort-btn" id="st-filter-deleted" onclick="setStatusFilter('deleted',this)">Supprimées</button>
@@ -1223,29 +1223,32 @@ async function loadVideos() {
   const videos = await sbGet('videos', 'order=added_at.desc');
   allVideos = videos || [];
 
-  // Fetch YT stats
-  const ytMap = {};
-  if (allVideos.length) {
-    for (let i=0; i<allVideos.length; i+=50) {
-      Object.assign(ytMap, await fetchYTStats(allVideos.slice(i,i+50).map(v=>v.video_id)));
-    }
+  // Fetch YT stats AND stats cache in parallel for speed
+  const ytBatches = [];
+  for (let i = 0; i < allVideos.length; i += 50) {
+    ytBatches.push(fetchYTStats(allVideos.slice(i, i + 50).map(v => v.video_id)));
   }
+  const [ytResults] = await Promise.all([
+    Promise.all(ytBatches),
+    reloadStatsCache()
+  ]);
+  const ytMap = Object.assign({}, ...ytResults);
 
+  // Patch DB for new publish dates and deleted status (fire-and-forget)
+  const patches = [];
   for (const v of allVideos) {
     v.yt = ytMap[v.video_id] || null;
     v.isDeleted = !v.yt;
-    // Save publish date to DB if new
     if (v.yt?.publishedAt && !v.published_at) {
-      await sbPatch('videos', `id=eq.${v.id}`, { published_at: v.yt.publishedAt });
+      patches.push(sbPatch('videos', `id=eq.${v.id}`, { published_at: v.yt.publishedAt }));
       v.published_at = v.yt.publishedAt;
     }
     if (!!v.is_deleted !== v.isDeleted) {
-      await sbPatch('videos', `id=eq.${v.id}`, { is_deleted: v.isDeleted });
+      patches.push(sbPatch('videos', `id=eq.${v.id}`, { is_deleted: v.isDeleted }));
     }
   }
-
-  // Load all stats history for period calculations (paginated)
-  await reloadStatsCache();
+  // Don't await patches — let them run in background
+  if (patches.length) Promise.all(patches).catch(() => {});
 
   // Header stats
   const today = todayFR();
@@ -1540,18 +1543,42 @@ async function refreshAllStats() {
   if (!allVideos.length) return;
   toast('Actualisation en cours...', 'success');
   const today = todayFR();
-  const ytMap = {};
-  for (let i=0; i<allVideos.length; i+=50) {
-    Object.assign(ytMap, await fetchYTStats(allVideos.slice(i,i+50).map(v=>v.video_id)));
+
+  // Fetch all YT stats in parallel batches
+  const batches = [];
+  for (let i = 0; i < allVideos.length; i += 50) {
+    batches.push(fetchYTStats(allVideos.slice(i, i + 50).map(v => v.video_id)));
   }
+  const ytResults = await Promise.all(batches);
+  const ytMap = Object.assign({}, ...ytResults);
+
+  // Build upsert payload for stats_history
+  const upserts = [];
   for (const v of allVideos) {
     const views = ytMap[v.video_id]?.views;
     if (views !== undefined) {
-      const ex = await sbGet('stats_history', `video_id=eq.${v.video_id}&recorded_at=eq.${today}`);
-      if (ex.length>0) await sbPatch('stats_history', `video_id=eq.${v.video_id}&recorded_at=eq.${today}`, {view_count:views});
-      else await sbPost('stats_history', {video_id:v.video_id, view_count:views, recorded_at:today});
+      upserts.push({ video_id: v.video_id, view_count: views, recorded_at: today });
     }
   }
+
+  // Batch upsert via Supabase (single request with Prefer: resolution=merge-duplicates)
+  if (upserts.length) {
+    await fetch(`${SUPABASE_URL}/rest/v1/stats_history`, {
+      method: 'POST',
+      headers: {
+        apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`,
+        'Content-Type': 'application/json',
+        Prefer: 'resolution=merge-duplicates'
+      },
+      body: JSON.stringify(upserts)
+    });
+  }
+
+  // Invalidate localStorage cache so next load fetches fresh data
+  try { localStorage.removeItem('xtv_stats_cache_v2'); } catch(e) {}
+
+  // Force-reload stats cache fresh from DB
+  await reloadStatsCache(true);
   await loadVideos();
   toast('✓ Stats mises à jour !', 'success');
 }
@@ -1785,6 +1812,14 @@ async function checkMidnightSnapshot() {
 setInterval(checkMidnightSnapshot, 60000);
 
 // (old date picker removed)
+
+// ─── DEBOUNCE ────────────────────────────────────────────────────────────────
+function debounce(fn, delay) {
+  let t; return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), delay); };
+}
+const debouncedApplyFilters = debounce(() => applyFilters(), 200);
+const debouncedRenderStats = debounce(() => renderStatsTable(), 200);
+const debouncedRenderStatus = debounce(() => renderStatusPanel(), 200);
 
 document.getElementById('urlInput').addEventListener('keydown', e => { if(e.key==='Enter') addVideo(); });
 
@@ -2086,38 +2121,75 @@ function setAnalyticsData(data, btn) {
 
 async function loadAnalytics() {
   document.getElementById('analytics-loading').style.display = 'flex';
-  // Always reload fresh from Supabase
-  await reloadStatsCache();
+  // Use existing cache if available (already loaded by loadVideos), otherwise reload
+  if (!allHistoryDates.length) {
+    await reloadStatsCache();
+  }
   renderAnalytics();
 }
 
-async function reloadStatsCache() {
+async function reloadStatsCache(forceRefresh = false) {
+  const CACHE_KEY = 'xtv_stats_cache_v2';
+  const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+  // Try localStorage cache first (speeds up repeated loads)
+  if (!forceRefresh) {
+    try {
+      const raw = localStorage.getItem(CACHE_KEY);
+      if (raw) {
+        const { ts, cache, dates } = JSON.parse(raw);
+        if (Date.now() - ts < CACHE_TTL) {
+          statsCache = cache;
+          allHistoryDates = dates;
+          console.log(`StatsCache from localStorage: ${allHistoryDates.length} dates`);
+          return;
+        }
+      }
+    } catch(e) {}
+  }
+
   // Load ALL rows with pagination (Supabase default limit = 1000)
   statsCache = {};
   allHistoryDates = [];
   const dateSet = new Set();
   let from = 0;
   const pageSize = 1000;
-  
+
+  // Fetch pages in parallel (2 at a time) for speed
   while (true) {
-    const r = await fetch(`${SUPABASE_URL}/rest/v1/stats_history?select=video_id,view_count,recorded_at&order=recorded_at.asc&limit=${pageSize}&offset=${from}`, {
-      headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` }
-    });
-    const batch = await r.json();
-    if (!batch || !batch.length) break;
-    
-    batch.forEach(s => {
-      if (!statsCache[s.recorded_at]) statsCache[s.recorded_at] = {};
-      statsCache[s.recorded_at][s.video_id] = s.view_count;
-      dateSet.add(s.recorded_at);
-    });
-    
-    if (batch.length < pageSize) break; // last page
-    from += pageSize;
+    const urls = [
+      `${SUPABASE_URL}/rest/v1/stats_history?select=video_id,view_count,recorded_at&order=recorded_at.asc&limit=${pageSize}&offset=${from}`,
+      `${SUPABASE_URL}/rest/v1/stats_history?select=video_id,view_count,recorded_at&order=recorded_at.asc&limit=${pageSize}&offset=${from + pageSize}`
+    ];
+    const headers = { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` };
+    const [r1, r2] = await Promise.all(urls.map(u => fetch(u, { headers })));
+    const [b1, b2] = await Promise.all([r1.json(), r2.json()]);
+
+    const batches = [b1, b2];
+    let gotFull = false;
+    for (let bi = 0; bi < batches.length; bi++) {
+      const batch = batches[bi];
+      if (!batch || !batch.length) break;
+      batch.forEach(s => {
+        if (!statsCache[s.recorded_at]) statsCache[s.recorded_at] = {};
+        statsCache[s.recorded_at][s.video_id] = s.view_count;
+        dateSet.add(s.recorded_at);
+      });
+      if (batch.length === pageSize) gotFull = true;
+      else break;
+    }
+
+    from += pageSize * 2;
+    if (!gotFull) break;
   }
-  
-  allHistoryDates = [...dateSet].sort((a,b) => b.localeCompare(a));
-  console.log(`StatsCache loaded: ${allHistoryDates.length} dates, ${from + (allHistoryDates.length > 0 ? 1 : 0)} pages`);
+
+  allHistoryDates = [...dateSet].sort((a, b) => b.localeCompare(a));
+  console.log(`StatsCache loaded from Supabase: ${allHistoryDates.length} dates`);
+
+  // Save to localStorage
+  try {
+    localStorage.setItem(CACHE_KEY, JSON.stringify({ ts: Date.now(), cache: statsCache, dates: allHistoryDates }));
+  } catch(e) { /* quota exceeded — ignore */ }
 }
 
 function renderAnalytics() {
@@ -2153,25 +2225,37 @@ function renderAnalytics() {
     dayTotals[date] = sum;
   }
 
-  // Compute deltas ONLY between consecutive available snapshots
-  // Then spread the delta across the gap days proportionally
+  // Compute deltas PER VIDEO (sum only positive deltas per video)
+  // This avoids the issue where a mid-day snapshot has fewer total views
+  // than the previous day's final snapshot (because not all videos are captured yet)
   const deltas = {}; // date -> new views that day
   for (let i = 1; i < sortedAvailDates.length; i++) {
     const cur = sortedAvailDates[i];
     const prv = sortedAvailDates[i-1];
-    const rawDelta = Math.max(0, (dayTotals[cur]||0) - (dayTotals[prv]||0));
-    
+
+    // Sum per-video positive deltas only
+    let totalPositiveDelta = 0;
+    const allVids = new Set([
+      ...Object.keys(statsCache[cur] || {}),
+      ...Object.keys(statsCache[prv] || {})
+    ]);
+    for (const vid of allVids) {
+      const cv = (statsCache[cur]?.[vid]) || 0;
+      const pv = (statsCache[prv]?.[vid]) || 0;
+      if (cv > pv) totalPositiveDelta += cv - pv;
+    }
+
     // Count how many calendar days between prv and cur
     const curD = new Date(cur + 'T12:00:00Z');
     const prvD = new Date(prv + 'T12:00:00Z');
     const gapDays = Math.round((curD - prvD) / 86400000); // 1 or more
-    
+
     if (gapDays <= 1) {
       // Normal consecutive days
-      deltas[cur] = rawDelta;
+      deltas[cur] = totalPositiveDelta;
     } else {
       // Gap: spread delta evenly across missing days
-      const perDay = Math.round(rawDelta / gapDays);
+      const perDay = Math.round(totalPositiveDelta / gapDays);
       for (let g = 1; g <= gapDays; g++) {
         const gd = new Date(prvD);
         gd.setDate(gd.getDate() + g);

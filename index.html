@@ -435,7 +435,7 @@
         <h1 class="page-title">Vue d'ensemble</h1>
         <div class="page-sub" id="dash-sub">Chargement des données…</div>
       </div>
-      <button class="btn" onclick="manualRefresh()">↻ Actualiser les stats</button>
+      <button class="btn refresh-btn" onclick="manualRefresh()"><span class="refresh-ic">↻</span> <span class="refresh-lbl">Actualiser les stats</span></button>
     </div>
     <div class="dash-kpis">
       <div class="dkpi"><div class="dkpi-label">Vues totales</div><div class="dkpi-value" id="dk-total">—</div><div class="dkpi-foot">cumul de toutes les vidéos suivies</div></div>
@@ -597,7 +597,7 @@
         <span class="count-badge" id="video-count">0 vidéos</span>
         <span id="period-indicator" style="display:none" class="period-indicator"></span>
       </div>
-      <button class="btn" id="main-refresh-btn" onclick="manualRefresh()" style="display:flex;align-items:center;gap:8px;">
+      <button class="btn refresh-btn" id="main-refresh-btn" onclick="manualRefresh()" style="display:flex;align-items:center;gap:8px;">
         <span id="refresh-icon">↻</span> Actualiser les stats
       </button>
     </div>
@@ -1735,38 +1735,185 @@ document.getElementById('delete-overlay').addEventListener('click', e => {
   if (e.target === document.getElementById('delete-overlay')) closeDeleteModal();
 });
 
-// ─── REFRESH ─────────────────────────────────────────────────────────────────
+// ─── REFRESH (avec verrou global anti-spam) ──────────────────────────────────
+const LOCK_STALE_MIN = 10; // un lock plus vieux que 10 min est considéré mort (crash)
+let lockPollTimer = null;
+
+function setRefreshUI(locked) {
+  document.querySelectorAll('.refresh-btn').forEach(btn => {
+    btn.disabled = locked;
+    btn.style.opacity = locked ? '0.55' : '1';
+    btn.style.cursor = locked ? 'not-allowed' : 'pointer';
+    const lbl = btn.querySelector('.refresh-lbl');
+    if (lbl) lbl.textContent = locked ? 'Actualisation en cours…' : 'Actualiser les stats';
+    const ic = btn.querySelector('.refresh-ic') || btn.querySelector('#refresh-icon');
+    if (ic) ic.style.animation = locked ? 'spin 0.8s linear infinite' : '';
+  });
+}
+
+async function getLock() {
+  try {
+    const rows = await sbGet('refresh_lock', 'id=eq.1&select=locked_at');
+    return rows?.[0]?.locked_at || null;
+  } catch(e) { return null; }
+}
+
+function lockIsActive(lockedAt) {
+  if (!lockedAt) return false;
+  const age = (Date.now() - new Date(lockedAt).getTime()) / 60000;
+  return age < LOCK_STALE_MIN; // lock trop vieux = ignoré (crash précédent)
+}
+
+async function acquireLock() {
+  const current = await getLock();
+  if (lockIsActive(current)) return false; // déjà verrouillé par ailleurs
+  await sbPatch('refresh_lock', 'id=eq.1', { locked_at: new Date().toISOString(), locked_by: 'manual' });
+  return true;
+}
+
+async function releaseLock() {
+  try { await sbPatch('refresh_lock', 'id=eq.1', { locked_at: null, locked_by: null }); } catch(e) {}
+}
+
+// Au chargement de la page : si un refresh est en cours ailleurs, on verrouille l'UI
+async function checkLockOnLoad() {
+  const lockedAt = await getLock();
+  if (lockIsActive(lockedAt)) {
+    setRefreshUI(true);
+    toast('Une actualisation est déjà en cours…', 'warning');
+    startLockPolling();
+  }
+}
+
+function startLockPolling() {
+  if (lockPollTimer) return;
+  lockPollTimer = setInterval(async () => {
+    const lockedAt = await getLock();
+    if (!lockIsActive(lockedAt)) {
+      clearInterval(lockPollTimer); lockPollTimer = null;
+      setRefreshUI(false);
+      toast('✓ Actualisation terminée', 'success');
+      await loadVideos();
+    }
+  }, 5000);
+}
+
 async function manualRefresh() {
-  const btn = document.getElementById('main-refresh-btn');
-  const icon = document.getElementById('refresh-icon');
-  btn.disabled = true;
-  icon.style.animation = 'spin 0.7s linear infinite';
-  btn.style.opacity = '0.7';
-  await refreshAllStats();
-  btn.disabled = false;
-  icon.style.animation = '';
-  btn.style.opacity = '1';
+  // 1. Tenter d'acquérir le verrou global (partagé entre appareils/onglets)
+  const ok = await acquireLock();
+  if (!ok) {
+    setRefreshUI(true);
+    toast('⚠️ Actualisation déjà en cours — patientez', 'warning');
+    startLockPolling();
+    return;
+  }
+  setRefreshUI(true);
+  try {
+    await refreshAllStats();
+  } finally {
+    await releaseLock();
+    setRefreshUI(false);
+  }
 }
 
 async function refreshAllStats() {
   if (!allVideos.length) return;
   toast('Actualisation en cours...', 'success');
   const today = todayFR();
-  const ytMap = {};
-  for (let i=0; i<allVideos.length; i+=50) {
-    Object.assign(ytMap, await fetchYTStats(allVideos.slice(i,i+50).map(v=>v.video_id)));
-  }
-  for (const v of allVideos) {
-    const views = ytMap[v.video_id]?.views;
-    if (views !== undefined) {
-      const ex = await sbGet('stats_history', `video_id=eq.${v.video_id}&recorded_at=eq.${today}`);
-      if (ex.length>0) await sbPatch('stats_history', `video_id=eq.${v.video_id}&recorded_at=eq.${today}`, {view_count:views});
-      else await sbPost('stats_history', {video_id:v.video_id, view_count:views, recorded_at:today});
+  const report = { started: new Date().toISOString(), ytBatchErrors: [], upsertErrors: [], scanned: 0, found: 0, saved: 0 };
+
+  try {
+    // 1. Récupérer les vues YouTube par lots de 50
+    const ytMap = {};
+    for (let i = 0; i < allVideos.length; i += 50) {
+      const batch = allVideos.slice(i, i + 50).map(v => v.video_id);
+      try {
+        Object.assign(ytMap, await fetchYTStats(batch));
+      } catch (e) {
+        report.ytBatchErrors.push(`Lot ${i/50}: ${e.message || e}`);
+      }
     }
+    report.scanned = allVideos.length;
+    report.found = Object.keys(ytMap).length;
+
+    // Garde-fou : si trop d'échecs YouTube, on n'écrit rien
+    const totalBatches = Math.ceil(allVideos.length / 50);
+    if (report.ytBatchErrors.length >= totalBatches * 0.2) {
+      throw new Error(`${report.ytBatchErrors.length}/${totalBatches} lots YouTube en échec — écriture annulée pour protéger les données`);
+    }
+
+    // 2. UPSERT groupé par lots de 500 (rapide, sans doublon grâce à la contrainte)
+    const rows = Object.entries(ytMap).map(([video_id, info]) => ({
+      video_id, view_count: info.views, recorded_at: today
+    }));
+    for (let i = 0; i < rows.length; i += 500) {
+      const chunk = rows.slice(i, i + 500);
+      const r = await fetch(`${SUPABASE_URL}/rest/v1/stats_history?on_conflict=video_id,recorded_at`, {
+        method: 'POST',
+        headers: {
+          apikey: SUPABASE_KEY,
+          Authorization: `Bearer ${SUPABASE_KEY}`,
+          'Content-Type': 'application/json',
+          Prefer: 'resolution=merge-duplicates'
+        },
+        body: JSON.stringify(chunk)
+      });
+      if (!r.ok) {
+        const txt = await r.text();
+        report.upsertErrors.push(`Chunk ${i}: HTTP ${r.status} — ${txt.slice(0, 200)}`);
+      } else {
+        report.saved += chunk.length;
+      }
+    }
+    if (report.upsertErrors.length) {
+      throw new Error(`${report.upsertErrors.length} lot(s) d'écriture en échec`);
+    }
+
+    await loadVideos();
+    toast(`✓ Stats mises à jour ! (${report.saved} vidéos)`, 'success');
+  } catch (e) {
+    report.fatal = String(e.message || e);
+    showRefreshError(report);
   }
-  await loadVideos();
-  toast('✓ Stats mises à jour !', 'success');
 }
+
+// ─── MODAL D'ERREUR DÉTAILLÉE ────────────────────────────────────────────────
+function showRefreshError(report) {
+  const detail = JSON.stringify(report, null, 2);
+  let ov = document.getElementById('refresh-error-overlay');
+  if (!ov) {
+    ov = document.createElement('div');
+    ov.id = 'refresh-error-overlay';
+    ov.style.cssText = 'display:flex;position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:700;align-items:center;justify-content:center;padding:16px;';
+    ov.innerHTML = `
+      <div style="background:var(--surface);border:1px solid var(--error);border-radius:6px;width:560px;max-width:95vw;max-height:85vh;display:flex;flex-direction:column;overflow:hidden;">
+        <div style="padding:18px 22px;border-bottom:1px solid var(--border);">
+          <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:1rem;color:var(--error);">✕ Échec de l'actualisation</div>
+          <div style="font-size:0.72rem;color:var(--text-dim);margin-top:4px;" id="refresh-error-summary"></div>
+        </div>
+        <pre id="refresh-error-detail" style="flex:1;overflow:auto;margin:0;padding:14px 22px;font-size:0.68rem;line-height:1.6;color:var(--text-dim);font-family:monospace;white-space:pre-wrap;"></pre>
+        <div style="padding:14px 22px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end;">
+          <button class="btn btn-ghost" onclick="document.getElementById('refresh-error-overlay').style.display='none'">Fermer</button>
+          <button class="btn" id="copy-error-btn" onclick="copyErrorReport()">📋 Copier le rapport</button>
+        </div>
+      </div>`;
+    document.body.appendChild(ov);
+  }
+  ov.style.display = 'flex';
+  document.getElementById('refresh-error-summary').textContent = report.fatal || 'Erreur inconnue';
+  document.getElementById('refresh-error-detail').textContent = detail;
+  window._lastErrorReport = detail;
+}
+
+function copyErrorReport() {
+  navigator.clipboard.writeText('Rapport erreur XENONTV YTB — refresh manuel\n' + (window._lastErrorReport || ''));
+  const b = document.getElementById('copy-error-btn');
+  b.textContent = '✓ Copié !';
+  setTimeout(() => b.textContent = '📋 Copier le rapport', 2000);
+}
+
+// Vérifier le lock au démarrage
+checkLockOnLoad();
 
 // ─── LOAD STATS ───────────────────────────────────────────────────────────────
 async function loadStats(dateStr) {

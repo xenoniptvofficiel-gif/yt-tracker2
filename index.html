@@ -2542,11 +2542,9 @@ function renderAnalytics() {
     }
   }
 
-  // Auto-detect spike threshold: only exclude MASSIVE import spikes (50x median)
-  const deltaValues = Object.values(deltas).filter(v => v > 0);
-  deltaValues.sort((a,b) => a-b);
-  const median = deltaValues[Math.floor(deltaValues.length / 2)] || 0;
-  const spikeThreshold = Math.max(median * 50, 50000); // very high threshold
+  // Seuil fixe : +10K/jour n'arrive jamais réellement sur cette chaîne.
+  // Tout dépassement = erreur de snapshot/job → exclu du graphique et des calculs.
+  const spikeThreshold = 10000;
 
   // Build chart data for selected period
   const labels = [];
@@ -2637,6 +2635,7 @@ function renderChart(labels, values, spikes) {
       maintainAspectRatio: true,
       animation: { duration: 800, easing: 'easeOutQuart' },
       aspectRatio: window.innerWidth < 600 ? 1.5 : 3,
+      interaction: { mode: 'index', intersect: false },
       plugins: {
         legend: { display: false },
         tooltip: {
@@ -2649,7 +2648,10 @@ function renderChart(labels, values, spikes) {
           cornerRadius: 10,
           displayColors: false,
           callbacks: {
-            label: ctx => ctx.raw === null ? '⚠ Pic exclu' : fmt(ctx.raw) + ' vues',
+            title: items => items?.[0]?.label || '',
+            label: ctx => ctx.raw === null
+              ? '⚠ Pic exclu (erreur de snapshot)'
+              : '+' + Number(ctx.raw).toLocaleString('fr-FR') + ' nouvelles vues',
           }
         }
       },
@@ -2761,7 +2763,7 @@ async function loadDashboard() {
   if (dashChart) dashChart.destroy();
   const grad = dctx.createLinearGradient(0, 0, 0, 260);
   grad.addColorStop(0, accentRgba(0.16)); grad.addColorStop(1, accentRgba(0));
-  dashChart = new Chart(dctx, { type: 'line', data: { labels: labels, datasets: [{ data: values, borderColor: themeAccent(), backgroundColor: grad, fill: true, tension: 0.45, borderWidth: 2.5, pointRadius: 0, pointHoverRadius: 5, pointHoverBackgroundColor: themeAccent(), spanGaps: true }] }, options: { responsive: true, maintainAspectRatio: false, animation: { duration: 900, easing: 'easeOutQuart' }, plugins: { legend: { display: false }, tooltip: { backgroundColor: CT().tip, borderColor: CT().tipBorder, borderWidth: 1, titleColor: CT().tipTitle, bodyColor: CT().tipBody, padding: 12, cornerRadius: 10, displayColors: false, callbacks: { label: c => c.raw === null ? 'Pic exclu' : fmt(c.raw) + ' nouvelles vues' } } }, scales: { x: { grid: { display: false }, ticks: { color: CT().tick, font: { family: 'Plus Jakarta Sans', size: 10 } } }, y: { grid: { color: CT().grid }, border: { display: false }, ticks: { color: CT().tick, font: { family: 'Plus Jakarta Sans', size: 10 }, callback: v => fmt(v) }, beginAtZero: true } } } });
+  dashChart = new Chart(dctx, { type: 'line', data: { labels: labels, datasets: [{ data: values, borderColor: themeAccent(), backgroundColor: grad, fill: true, tension: 0.45, borderWidth: 2.5, pointRadius: 0, pointHoverRadius: 5, pointHoverBackgroundColor: themeAccent(), spanGaps: true }] }, options: { responsive: true, maintainAspectRatio: false, animation: { duration: 900, easing: 'easeOutQuart' }, plugins: { legend: { display: false }, tooltip: { backgroundColor: CT().tip, borderColor: CT().tipBorder, borderWidth: 1, titleColor: CT().tipTitle, bodyColor: CT().tipBody, padding: 12, cornerRadius: 10, displayColors: false, callbacks: { label: c => c.raw === null ? '⚠ Pic exclu (erreur de snapshot)' : '+' + Number(c.raw).toLocaleString('fr-FR') + ' nouvelles vues' } } }, scales: { x: { grid: { display: false }, ticks: { color: CT().tick, font: { family: 'Plus Jakarta Sans', size: 10 } } }, y: { grid: { color: CT().grid }, border: { display: false }, ticks: { color: CT().tick, font: { family: 'Plus Jakarta Sans', size: 10 }, callback: v => fmt(v) }, beginAtZero: true } } } });
   document.getElementById('dash-chart-loading').style.display = 'none';
 }
 

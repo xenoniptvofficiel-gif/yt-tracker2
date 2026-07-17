@@ -84,7 +84,7 @@
   .link-btn:hover{color:var(--accent)}
   .dash-chart-wrap{position:relative;height:290px;padding:18px 22px 12px}
   .dash-chart-wrap canvas{width:100%!important;height:100%!important}
-  .chart-loading{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:var(--surface)}
+  .chart-loading{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:var(--surface);pointer-events:none}
   .top-list{display:flex;flex-direction:column;min-height:120px;padding:6px}
   .top-row{display:grid;grid-template-columns:20px 64px minmax(0,1fr) auto;gap:12px;align-items:center;padding:9px 14px;border-radius:10px;transition:background .13s;color:inherit}
   .top-row:hover{background:var(--surface2)}
@@ -2449,39 +2449,75 @@ function setAnalyticsData(data, btn) {
 }
 
 async function loadAnalytics() {
-  document.getElementById('analytics-loading').style.display = 'flex';
-  // Always reload fresh from Supabase
-  await reloadStatsCache();
-  renderAnalytics();
+  const loadEl = document.getElementById('analytics-loading');
+  loadEl.style.display = 'flex';
+  loadEl.style.pointerEvents = 'none';
+  loadEl.innerHTML = '<div class="loading"><div class="spinner"></div> Chargement des données…</div>';
+  try {
+    await reloadStatsCache();
+    renderAnalytics();
+  } catch (e) {
+    console.error('[stats] échec:', e);
+    window._statsError = String(e.message || e);
+    loadEl.style.display = 'flex';
+    loadEl.style.pointerEvents = 'auto';
+    loadEl.innerHTML = `
+      <div style="text-align:center;max-width:480px;padding:20px;">
+        <div style="font-family:'Syne',sans-serif;font-weight:800;color:var(--error);margin-bottom:8px;">✕ Impossible de charger les statistiques</div>
+        <div style="font-size:0.75rem;color:var(--text-dim);margin-bottom:14px;word-break:break-word;">${window._statsError}</div>
+        <button class="btn" onclick="loadAnalytics()">↻ Réessayer</button>
+        <button class="btn btn-ghost" style="margin-left:8px;" onclick="navigator.clipboard.writeText('Erreur page Statistiques XENONTV: '+window._statsError);this.textContent='✓ Copié'">📋 Copier l'erreur</button>
+      </div>`;
+  }
 }
 
 async function reloadStatsCache() {
-  // Load ALL rows with pagination (Supabase default limit = 1000)
-  statsCache = {};
-  allHistoryDates = [];
-  const dateSet = new Set();
-  let from = 0;
+  // Chargement complet, paginé et PARALLÈLE, avec erreurs remontées à l'écran
   const pageSize = 1000;
-  
-  while (true) {
-    const r = await fetch(`${SUPABASE_URL}/rest/v1/stats_history?select=video_id,view_count,recorded_at&order=recorded_at.asc&limit=${pageSize}&offset=${from}`, {
-      headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` }
-    });
-    const batch = await r.json();
-    if (!batch || !batch.length) break;
-    
-    batch.forEach(s => {
+  const hdrs = { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`, Prefer: 'count=exact' };
+
+  // 1. Première page + nombre total exact de lignes
+  const r0 = await fetch(`${SUPABASE_URL}/rest/v1/stats_history?select=video_id,view_count,recorded_at&order=recorded_at.asc,video_id.asc&limit=${pageSize}&offset=0`, { headers: hdrs });
+  if (!r0.ok) throw new Error(`Supabase HTTP ${r0.status} — ${(await r0.text()).slice(0,200)}`);
+  const first = await r0.json();
+  const range = r0.headers.get('content-range') || '';           // ex: "0-999/91234"
+  const totalRows = parseInt(range.split('/')[1]) || first.length;
+  console.log(`[stats] total lignes: ${totalRows}`);
+
+  // 2. Pages restantes en parallèle (par vagues de 8 pour ne pas saturer)
+  const pages = [first];
+  const offsets = [];
+  for (let o = pageSize; o < totalRows; o += pageSize) offsets.push(o);
+  for (let i = 0; i < offsets.length; i += 8) {
+    const wave = offsets.slice(i, i + 8);
+    const results = await Promise.all(wave.map(async (o) => {
+      const r = await fetch(`${SUPABASE_URL}/rest/v1/stats_history?select=video_id,view_count,recorded_at&order=recorded_at.asc,video_id.asc&limit=${pageSize}&offset=${o}`, {
+        headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` }
+      });
+      if (!r.ok) throw new Error(`Supabase HTTP ${r.status} (offset ${o})`);
+      return r.json();
+    }));
+    pages.push(...results);
+  }
+
+  // 3. Construction du cache
+  statsCache = {};
+  const dateSet = new Set();
+  let loaded = 0;
+  for (const batch of pages) {
+    for (const s of batch) {
       if (!statsCache[s.recorded_at]) statsCache[s.recorded_at] = {};
       statsCache[s.recorded_at][s.video_id] = s.view_count;
       dateSet.add(s.recorded_at);
-    });
-    
-    if (batch.length < pageSize) break; // last page
-    from += pageSize;
+      loaded++;
+    }
   }
-  
   allHistoryDates = [...dateSet].sort((a,b) => b.localeCompare(a));
-  console.log(`StatsCache loaded: ${allHistoryDates.length} dates, ${from + (allHistoryDates.length > 0 ? 1 : 0)} pages`);
+  console.log(`[stats] chargé: ${loaded}/${totalRows} lignes, ${allHistoryDates.length} dates`);
+
+  if (allHistoryDates.length < 2) {
+    throw new Error(`Données insuffisantes: ${loaded} lignes / ${allHistoryDates.length} dates chargées (attendu: >100 dates)`);
+  }
 }
 
 function renderAnalytics() {
@@ -2767,7 +2803,7 @@ async function loadDashboard() {
   if (dashChart) dashChart.destroy();
   const grad = dctx.createLinearGradient(0, 0, 0, 260);
   grad.addColorStop(0, accentRgba(0.16)); grad.addColorStop(1, accentRgba(0));
-  dashChart = new Chart(dctx, { type: 'line', data: { labels: labels, datasets: [{ data: values, borderColor: themeAccent(), backgroundColor: grad, fill: true, tension: 0.45, borderWidth: 2.5, pointRadius: 0, pointHoverRadius: 5, pointHoverBackgroundColor: themeAccent(), spanGaps: true }] }, options: { responsive: true, maintainAspectRatio: false, animation: { duration: 900, easing: 'easeOutQuart' }, plugins: { legend: { display: false }, tooltip: { backgroundColor: CT().tip, borderColor: CT().tipBorder, borderWidth: 1, titleColor: CT().tipTitle, bodyColor: CT().tipBody, padding: 12, cornerRadius: 10, displayColors: false, callbacks: { label: c => c.raw === null ? '⚠ Pic exclu (erreur de snapshot)' : '+' + Number(c.raw).toLocaleString('fr-FR') + ' nouvelles vues' } } }, scales: { x: { grid: { display: false }, ticks: { color: CT().tick, font: { family: 'Plus Jakarta Sans', size: 10 } } }, y: { grid: { color: CT().grid }, border: { display: false }, ticks: { color: CT().tick, font: { family: 'Plus Jakarta Sans', size: 10 }, callback: v => fmt(v) }, beginAtZero: true } } } });
+  dashChart = new Chart(dctx, { type: 'line', data: { labels: labels, datasets: [{ data: values, borderColor: themeAccent(), backgroundColor: grad, fill: true, tension: 0.45, borderWidth: 2.5, pointRadius: 0, pointHoverRadius: 6, pointHitRadius: 20, pointHoverBackgroundColor: themeAccent(), pointBorderColor: '#ffffff', pointBorderWidth: 1.5, spanGaps: true }] }, options: { responsive: true, maintainAspectRatio: false, animation: { duration: 900, easing: 'easeOutQuart' }, interaction: { mode: 'index', intersect: false }, hover: { mode: 'index', intersect: false }, plugins: { legend: { display: false }, tooltip: { backgroundColor: CT().tip, borderColor: CT().tipBorder, borderWidth: 1, titleColor: CT().tipTitle, bodyColor: CT().tipBody, padding: 12, cornerRadius: 10, displayColors: false, callbacks: { title: items => items?.[0]?.label || '', label: c => c.raw === null ? '⚠ Pic exclu (erreur de snapshot)' : '+' + Number(c.raw).toLocaleString('fr-FR') + ' nouvelles vues' } } }, scales: { x: { grid: { display: false }, ticks: { color: CT().tick, font: { family: 'Plus Jakarta Sans', size: 10 } } }, y: { grid: { color: CT().grid }, border: { display: false }, ticks: { color: CT().tick, font: { family: 'Plus Jakarta Sans', size: 10 }, callback: v => fmt(v) }, beginAtZero: true } } } });
   document.getElementById('dash-chart-loading').style.display = 'none';
 }
 

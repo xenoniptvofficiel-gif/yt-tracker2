@@ -915,6 +915,10 @@ let currentPeriod = 'total';
 let customPeriodDate = null;   // YYYY-MM-DD string when period=custom
 let statsCache = {};           // { date: { video_id: view_count } }
 let allHistoryDates = [];      // sorted desc
+// Seuil fixe : +10K nouvelles vues/jour n'arrive jamais reellement sur cette
+// chaine (~1-3K/jour). Tout depassement = erreur de snapshot → exclu du
+// graphique et des calculs. Partage par les 2 graphiques (dashboard + stats).
+const SPIKE_THRESHOLD = 10000;
 let currentPage = 1;
 let statsSort = 'title';
 let statsPage = 1;
@@ -2581,9 +2585,7 @@ function renderAnalytics() {
     }
   }
 
-  // Seuil fixe : +10K/jour n'arrive jamais réellement sur cette chaîne.
-  // Tout dépassement = erreur de snapshot/job → exclu du graphique et des calculs.
-  const spikeThreshold = 10000;
+  const spikeThreshold = SPIKE_THRESHOLD;
 
   // Build chart data for selected period
   const labels = [];
@@ -2780,23 +2782,26 @@ async function loadDashboard() {
   if (dashLoaded) return;
   dashLoaded = true;
   const since = daysAgo(15);
-  const dayTotals = {};
+  // Tri stable (video_id en départage) : sans lui, l'ordre des lignes d'une même
+  // date n'est pas garanti entre deux pages OFFSET → une ligne peut revenir deux
+  // fois pendant qu'une autre est sautée. On indexe par video_id pour que tout
+  // doublon soit écrasé au lieu de gonfler le total du jour.
+  const dayCache = {}; // date -> { video_id: view_count }
   let from = 0;
   while (true) {
-    const batch = await sbGet('stats_history', 'select=view_count,recorded_at&recorded_at=gte.' + since + '&order=recorded_at.asc&limit=1000&offset=' + from);
+    const batch = await sbGet('stats_history', 'select=video_id,view_count,recorded_at&recorded_at=gte.' + since + '&order=recorded_at.asc,video_id.asc&limit=1000&offset=' + from);
     if (!batch || !batch.length) break;
-    batch.forEach(s => { dayTotals[s.recorded_at] = (dayTotals[s.recorded_at] || 0) + s.view_count; });
+    batch.forEach(s => { (dayCache[s.recorded_at] = dayCache[s.recorded_at] || {})[s.video_id] = s.view_count; });
     if (batch.length < 1000) break;
     from += 1000;
   }
+  const dayTotals = {};
+  for (const d in dayCache) dayTotals[d] = Object.values(dayCache[d]).reduce((a, b) => a + b, 0);
   const dates = Object.keys(dayTotals).sort();
   const raw = [];
   for (let i = 1; i < dates.length; i++) raw.push({ d: dates[i], v: Math.max(0, dayTotals[dates[i]] - dayTotals[dates[i - 1]]) });
-  const sortedV = raw.map(r => r.v).filter(v => v > 0).sort((a, b) => a - b);
-  const med = sortedV[Math.floor(sortedV.length / 2)] || 0;
-  const cap = Math.max(med * 50, 50000);
   const labels = raw.map(r => fmtDate(r.d).slice(0, 5));
-  const values = raw.map(r => r.v > cap ? null : r.v);
+  const values = raw.map(r => r.v > SPIKE_THRESHOLD ? null : r.v);
   const cv = document.getElementById('dash-chart');
   if (!cv) return;
   const dctx = cv.getContext('2d');

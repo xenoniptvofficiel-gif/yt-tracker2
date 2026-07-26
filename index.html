@@ -2563,7 +2563,14 @@ function renderAnalytics() {
   for (let i = 1; i < sortedAvailDates.length; i++) {
     const cur = sortedAvailDates[i];
     const prv = sortedAvailDates[i-1];
-    const rawDelta = Math.max(0, (dayTotals[cur]||0) - (dayTotals[prv]||0));
+    // Delta PAR VIDEO, uniquement celles presentes les deux jours : sinon une
+    // suppression (video qui quitte le snapshot) fait chuter le total et ecrase
+    // le vrai chiffre (bug "60 au lieu de 670"), et une nouvelle video gonflerait.
+    const curSnap = statsCache[cur] || {}, prvSnap = statsCache[prv] || {};
+    let rawDelta = 0;
+    for (const vid in curSnap) {
+      if (vid in prvSnap) { const g = curSnap[vid] - prvSnap[vid]; if (g > 0) rawDelta += g; }
+    }
     
     // Count how many calendar days between prv and cur
     const curD = new Date(cur + 'T12:00:00Z');
@@ -2795,11 +2802,17 @@ async function loadDashboard() {
     if (batch.length < 1000) break;
     from += 1000;
   }
-  const dayTotals = {};
-  for (const d in dayCache) dayTotals[d] = Object.values(dayCache[d]).reduce((a, b) => a + b, 0);
-  const dates = Object.keys(dayTotals).sort();
+  const dates = Object.keys(dayCache).sort();
   const raw = [];
-  for (let i = 1; i < dates.length; i++) raw.push({ d: dates[i], v: Math.max(0, dayTotals[dates[i]] - dayTotals[dates[i - 1]]) });
+  // Delta PAR VIDEO (intersection des 2 jours), comme la page Statistiques :
+  // soustraire les totaux du jour fausse le chiffre quand des videos sont
+  // supprimees (elles quittent le snapshot et le total chute → "60 au lieu de 670").
+  for (let i = 1; i < dates.length; i++) {
+    const cur = dayCache[dates[i]], prv = dayCache[dates[i - 1]];
+    let delta = 0;
+    for (const vid in cur) { if (vid in prv) { const g = cur[vid] - prv[vid]; if (g > 0) delta += g; } }
+    raw.push({ d: dates[i], v: delta });
+  }
   const labels = raw.map(r => fmtDate(r.d).slice(0, 5));
   const values = raw.map(r => r.v > SPIKE_THRESHOLD ? null : r.v);
   const cv = document.getElementById('dash-chart');

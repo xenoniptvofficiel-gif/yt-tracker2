@@ -1282,12 +1282,15 @@ function getViewsForPeriod(videoId) {
   }
   if (currentPeriod === 'today') {
     const yest = statsCache[prevDay(today)]?.[videoId] || 0;
+    if (!yest) return 0; // absente du snapshot d'hier → pas de base, delta non calculable (évite le faux pic)
     return Math.max(0, todayViews - yest);
   }
   if (currentPeriod === 'yesterday') {
     const yest = prevDay(today);
     const dayBefore = prevDay(yest);
-    return Math.max(0, (statsCache[yest]?.[videoId]||0) - (statsCache[dayBefore]?.[videoId]||0));
+    const dbv = statsCache[dayBefore]?.[videoId]||0;
+    if (!dbv) return 0; // pas de base l'avant-veille → delta non calculable
+    return Math.max(0, (statsCache[yest]?.[videoId]||0) - dbv);
   }
   if (currentPeriod === '7d') {
     const from = daysAgo(7);
@@ -1473,7 +1476,9 @@ async function loadVideos() {
     v.isDeleted ? deletedCount++ : onlineCount++;
     const tv = statsCache[today]?.[v.video_id]||0;
     const yv = statsCache[yesterday]?.[v.video_id]||0;
-    if (tv - yv > 0) todayDelta += tv - yv;
+    // yv > 0 : ne compter que les vidéos présentes hier aussi (intersection), sinon
+    // une vidéo absente du snapshot d'hier verse tout son cumul → faux pic.
+    if (tv - yv > 0 && yv > 0) todayDelta += tv - yv;
   });
 
   animateValue(document.getElementById('hdr-views'), totalViews);
@@ -2770,13 +2775,16 @@ async function loadDashboard() {
     v.isDeleted ? deleted++ : online++;
     const tv = statsCache[today]?.[v.video_id] || 0, yv = statsCache[yest]?.[v.video_id] || 0;
     const d = tv - yv;
-    if (d > 0) { todayDelta += d; if (yv > 0) tops.push({ v: v, d: d }); }
+    // yv > 0 exige que la vidéo soit présente HIER aussi (intersection) : sinon une
+    // vidéo absente du snapshot de la veille (jour "court") verse tout son cumul dans
+    // le compteur → faux pic (ex. +2 906 au lieu de +450). Même logique que les graphes.
+    if (d > 0 && yv > 0) { todayDelta += d; tops.push({ v: v, d: d }); }
   });
   animateValue(document.getElementById('dk-total'), totalViews);
   if (todayDelta > 0) animateValue(document.getElementById('dk-today'), todayDelta, '+'); else document.getElementById('dk-today').textContent = '—';
   animateValue(document.getElementById('dk-online'), online, '', true);
   animateValue(document.getElementById('dk-deleted'), deleted, '', true);
-  document.getElementById('dash-sub').textContent = allVideos.length + ' vidéos suivies · scan auto toutes les 2 h · dernière lecture à ' + new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+  document.getElementById('dash-sub').textContent = allVideos.length + ' vidéos suivies · scan auto toutes les 30 min · dernière lecture à' + new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
   tops.sort((a, b) => b.d - a.d);
   const top6 = tops.slice(0, 6);
   document.getElementById('dash-top').innerHTML = top6.length

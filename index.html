@@ -1283,14 +1283,18 @@ function getViewsForPeriod(videoId) {
   if (currentPeriod === 'today') {
     const yest = statsCache[prevDay(today)]?.[videoId] || 0;
     if (!yest) return 0; // absente du snapshot d'hier → pas de base, delta non calculable (évite le faux pic)
-    return Math.max(0, todayViews - yest);
+    const d = todayViews - yest;
+    if (d > SPIKE_THRESHOLD) return 0; // pic anormal (backlog/erreur) écarté ce jour-là
+    return Math.max(0, d);
   }
   if (currentPeriod === 'yesterday') {
     const yest = prevDay(today);
     const dayBefore = prevDay(yest);
     const dbv = statsCache[dayBefore]?.[videoId]||0;
     if (!dbv) return 0; // pas de base l'avant-veille → delta non calculable
-    return Math.max(0, (statsCache[yest]?.[videoId]||0) - dbv);
+    const d = (statsCache[yest]?.[videoId]||0) - dbv;
+    if (d > SPIKE_THRESHOLD) return 0; // pic anormal écarté
+    return Math.max(0, d);
   }
   if (currentPeriod === '7d') {
     const from = daysAgo(7);
@@ -1478,7 +1482,9 @@ async function loadVideos() {
     const yv = statsCache[yesterday]?.[v.video_id]||0;
     // yv > 0 : ne compter que les vidéos présentes hier aussi (intersection), sinon
     // une vidéo absente du snapshot d'hier verse tout son cumul → faux pic.
-    if (tv - yv > 0 && yv > 0) todayDelta += tv - yv;
+    // <= SPIKE_THRESHOLD : écarter aussi une vidéo dont le compteur bondit de plus de
+    // 10K en un jour (backlog/erreur) — comptée normalement dès le lendemain.
+    if (tv - yv > 0 && yv > 0 && tv - yv <= SPIKE_THRESHOLD) todayDelta += tv - yv;
   });
 
   animateValue(document.getElementById('hdr-views'), totalViews);
@@ -2565,16 +2571,26 @@ function renderAnalytics() {
   // Compute deltas ONLY between consecutive available snapshots
   // Then spread the delta across the gap days proportionally
   const deltas = {}; // date -> new views that day
+  const excludedByDay = {}; // date -> nb de videos ecartees (pic) ce jour
   for (let i = 1; i < sortedAvailDates.length; i++) {
     const cur = sortedAvailDates[i];
     const prv = sortedAvailDates[i-1];
-    // Delta PAR VIDEO, uniquement celles presentes les deux jours : sinon une
-    // suppression (video qui quitte le snapshot) fait chuter le total et ecrase
-    // le vrai chiffre (bug "60 au lieu de 670"), et une nouvelle video gonflerait.
+    // Delta PAR VIDEO, uniquement celles presentes les deux jours (intersection) :
+    // sinon une suppression fait chuter le total ("60 au lieu de 670") et une
+    // nouvelle video gonflerait.
+    // Exclusion des pics PAR VIDEO : une video dont le compteur bondit de plus de
+    // SPIKE_THRESHOLD en un jour = backlog d'une video nouvellement suivie ou erreur
+    // de snapshot. On l'ecarte CE jour-la seulement (sa vue reste stockee en base,
+    // sa vraie croissance sera comptee des le snapshot suivant). On n'annule PLUS le
+    // jour entier : les autres videos restent visibles.
     const curSnap = statsCache[cur] || {}, prvSnap = statsCache[prv] || {};
-    let rawDelta = 0;
+    let rawDelta = 0, excl = 0;
     for (const vid in curSnap) {
-      if (vid in prvSnap) { const g = curSnap[vid] - prvSnap[vid]; if (g > 0) rawDelta += g; }
+      if (vid in prvSnap) {
+        const g = curSnap[vid] - prvSnap[vid];
+        if (g > 0 && g <= SPIKE_THRESHOLD) rawDelta += g;
+        else if (g > SPIKE_THRESHOLD) excl++;
+      }
     }
     
     // Count how many calendar days between prv and cur
@@ -2585,6 +2601,7 @@ function renderAnalytics() {
     if (gapDays <= 1) {
       // Normal consecutive days
       deltas[cur] = rawDelta;
+      excludedByDay[cur] = excl;
     } else {
       // Gap: spread delta evenly across missing days
       const perDay = Math.round(rawDelta / gapDays);
@@ -2597,8 +2614,6 @@ function renderAnalytics() {
     }
   }
 
-  const spikeThreshold = SPIKE_THRESHOLD;
-
   // Build chart data for selected period
   const labels = [];
   const values = [];
@@ -2609,10 +2624,9 @@ function renderAnalytics() {
     labels.push(label);
     
     if (analyticsData === 'delta') {
-      const delta = deltas[d] || 0;
-      const isSpike = delta > spikeThreshold;
-      spikes.push(isSpike);
-      values.push(isSpike ? null : delta); // null = gap in chart
+      // Le delta est deja filtre par video : on ne masque plus le jour entier.
+      spikes.push((excludedByDay[d] || 0) > 0);
+      values.push(deltas[d] || 0);
     } else {
       spikes.push(false);
       values.push(dayTotals[d] || null);
@@ -2645,7 +2659,7 @@ function renderAnalytics() {
   renderChart(labels, values, spikes);
 
   // Render daily table
-  renderAnalyticsTable(days, deltas, dayTotals, spikes, spikeThreshold);
+  renderAnalyticsTable(days, deltas, dayTotals, excludedByDay);
 
   document.getElementById('analytics-loading').style.display = 'none';
 }
@@ -2725,21 +2739,22 @@ function renderChart(labels, values, spikes) {
   });
 }
 
-function renderAnalyticsTable(days, deltas, dayTotals, spikes, spikeThreshold) {
+function renderAnalyticsTable(days, deltas, dayTotals, excludedByDay) {
   const container = document.getElementById('analytics-table');
   if (!days.length) { container.innerHTML = '<div class="empty-state"><div class="big">📈</div>Pas encore assez de données.</div>'; return; }
 
   // Compute day-over-day growth %
   const rows = [...days].reverse().map((d, i, arr) => {
     const delta = deltas[d] || 0;
-    const isSpike = delta > spikeThreshold;
+    const exc = excludedByDay ? (excludedByDay[d] || 0) : 0; // videos ecartees (pic) ce jour
     const prevDay = arr[i+1];
     const prevDelta = prevDay ? (deltas[prevDay]||0) : 0;
-    const growth = prevDelta > 0 && !isSpike ? Math.round(((delta - prevDelta) / prevDelta) * 100) : null;
+    const growth = prevDelta > 0 ? Math.round(((delta - prevDelta) / prevDelta) * 100) : null;
     const total = dayTotals[d] || 0;
 
-    const spikeStyle = isSpike ? 'opacity:0.4;' : '';
-    const deltaStr = isSpike ? `<span style="color:var(--text-muted)">⚠ pic (${fmt(delta)})</span>` : `<span style="color:var(--success);font-weight:600">+${fmt(delta)}</span>`;
+    const spikeStyle = '';
+    const excNote = exc > 0 ? ` <span style="color:var(--text-muted);font-size:0.85em;" title="Vidéo(s) au pic anormal écartée(s) ce jour — comptée(s) normalement dès le lendemain">(${exc} écartée${exc>1?'s':''})</span>` : '';
+    const deltaStr = `<span style="color:var(--success);font-weight:600">+${fmt(delta)}</span>${excNote}`;
     const growthStr = growth === null ? '<span style="color:var(--text-muted)">—</span>'
       : growth > 0 ? `<span style="color:var(--success)">+${growth}%</span>`
       : growth < 0 ? `<span style="color:var(--error)">${growth}%</span>`
@@ -2778,7 +2793,7 @@ async function loadDashboard() {
     // yv > 0 exige que la vidéo soit présente HIER aussi (intersection) : sinon une
     // vidéo absente du snapshot de la veille (jour "court") verse tout son cumul dans
     // le compteur → faux pic (ex. +2 906 au lieu de +450). Même logique que les graphes.
-    if (d > 0 && yv > 0) { todayDelta += d; tops.push({ v: v, d: d }); }
+    if (d > 0 && yv > 0 && d <= SPIKE_THRESHOLD) { todayDelta += d; tops.push({ v: v, d: d }); }
   });
   animateValue(document.getElementById('dk-total'), totalViews);
   if (todayDelta > 0) animateValue(document.getElementById('dk-today'), todayDelta, '+'); else document.getElementById('dk-today').textContent = '—';
@@ -2818,11 +2833,14 @@ async function loadDashboard() {
   for (let i = 1; i < dates.length; i++) {
     const cur = dayCache[dates[i]], prv = dayCache[dates[i - 1]];
     let delta = 0;
-    for (const vid in cur) { if (vid in prv) { const g = cur[vid] - prv[vid]; if (g > 0) delta += g; } }
+    // Exclusion des pics PAR VIDEO (comme la page Statistiques) : on ecarte une video
+    // dont le compteur bondit de plus de SPIKE_THRESHOLD en un jour, sans masquer le
+    // jour entier.
+    for (const vid in cur) { if (vid in prv) { const g = cur[vid] - prv[vid]; if (g > 0 && g <= SPIKE_THRESHOLD) delta += g; } }
     raw.push({ d: dates[i], v: delta });
   }
   const labels = raw.map(r => fmtDate(r.d).slice(0, 5));
-  const values = raw.map(r => r.v > SPIKE_THRESHOLD ? null : r.v);
+  const values = raw.map(r => r.v);
   const cv = document.getElementById('dash-chart');
   if (!cv) return;
   const dctx = cv.getContext('2d');

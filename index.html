@@ -915,6 +915,7 @@ let currentPeriod = 'total';
 let customPeriodDate = null;   // YYYY-MM-DD string when period=custom
 let statsCache = {};           // { date: { video_id: view_count } }
 let allHistoryDates = [];      // sorted desc
+let videoAddedDate = {};       // video_id -> 'YYYY-MM-DD' (date d'import, depuis videos.added_at)
 // Seuil fixe : +10K nouvelles vues/jour n'arrive jamais reellement sur cette
 // chaine (~1-3K/jour). Tout depassement = erreur de snapshot → exclu du
 // graphique et des calculs. Partage par les 2 graphiques (dashboard + stats).
@@ -1281,7 +1282,10 @@ function getViewsForPeriod(videoId) {
     return allVideos.find(v=>v.video_id===videoId)?.yt?.views || 0;
   }
   if (currentPeriod === 'today') {
-    const yest = statsCache[prevDay(today)]?.[videoId] || 0;
+    const baseDay = prevDay(today);
+    const imp = videoAddedDate[videoId];
+    if (imp && imp >= baseDay) return 0; // importée aujourd'hui/hier → jour d'import + tampon, pas de vues comptées
+    const yest = statsCache[baseDay]?.[videoId] || 0;
     if (!yest) return 0; // absente du snapshot d'hier → pas de base, delta non calculable (évite le faux pic)
     const d = todayViews - yest;
     if (d > SPIKE_THRESHOLD) return 0; // pic anormal (backlog/erreur) écarté ce jour-là
@@ -1290,6 +1294,8 @@ function getViewsForPeriod(videoId) {
   if (currentPeriod === 'yesterday') {
     const yest = prevDay(today);
     const dayBefore = prevDay(yest);
+    const imp = videoAddedDate[videoId];
+    if (imp && imp >= dayBefore) return 0; // importée le jour de reference (ou apres) → non comptée
     const dbv = statsCache[dayBefore]?.[videoId]||0;
     if (!dbv) return 0; // pas de base l'avant-veille → delta non calculable
     const d = (statsCache[yest]?.[videoId]||0) - dbv;
@@ -1439,6 +1445,11 @@ function buildPageRange(current, total) {
 async function loadVideos() {
   const videos = await sbGet('videos', 'order=added_at.desc');
   allVideos = videos || [];
+  // Registre des dates d'import : sert a NE PAS compter les vues d'une video le jour
+  // de son import (et le lendemain, tampon anti-snapshot-partiel). On snapshot sa vue
+  // a l'import, puis on ne compte que sa croissance des les jours suivants.
+  videoAddedDate = {};
+  allVideos.forEach(v => { if (v.added_at) videoAddedDate[v.video_id] = v.added_at.slice(0, 10); });
 
   // Fetch YT stats
   const ytMap = {};
@@ -1484,7 +1495,10 @@ async function loadVideos() {
     // une vidéo absente du snapshot d'hier verse tout son cumul → faux pic.
     // <= SPIKE_THRESHOLD : écarter aussi une vidéo dont le compteur bondit de plus de
     // 10K en un jour (backlog/erreur) — comptée normalement dès le lendemain.
-    if (tv - yv > 0 && yv > 0 && tv - yv <= SPIKE_THRESHOLD) todayDelta += tv - yv;
+    // !(imp >= yesterday) : ne pas compter une vidéo importée aujourd'hui/hier (jour
+    // d'import + tampon) — on ne prend que sa croissance des les jours suivants.
+    const imp = v.added_at ? v.added_at.slice(0, 10) : null;
+    if (tv - yv > 0 && yv > 0 && tv - yv <= SPIKE_THRESHOLD && !(imp && imp >= yesterday)) todayDelta += tv - yv;
   });
 
   animateValue(document.getElementById('hdr-views'), totalViews);
@@ -2587,6 +2601,8 @@ function renderAnalytics() {
     let rawDelta = 0, excl = 0;
     for (const vid in curSnap) {
       if (vid in prvSnap) {
+        const imp = videoAddedDate[vid];
+        if (imp && imp >= prv) continue; // importee le jour de reference (ou apres) -> jour d'import + tampon, non comptee
         const g = curSnap[vid] - prvSnap[vid];
         if (g > 0 && g <= SPIKE_THRESHOLD) rawDelta += g;
         else if (g > SPIKE_THRESHOLD) excl++;
@@ -2793,7 +2809,8 @@ async function loadDashboard() {
     // yv > 0 exige que la vidéo soit présente HIER aussi (intersection) : sinon une
     // vidéo absente du snapshot de la veille (jour "court") verse tout son cumul dans
     // le compteur → faux pic (ex. +2 906 au lieu de +450). Même logique que les graphes.
-    if (d > 0 && yv > 0 && d <= SPIKE_THRESHOLD) { todayDelta += d; tops.push({ v: v, d: d }); }
+    const imp = v.added_at ? v.added_at.slice(0, 10) : null;
+    if (d > 0 && yv > 0 && d <= SPIKE_THRESHOLD && !(imp && imp >= yest)) { todayDelta += d; tops.push({ v: v, d: d }); }
   });
   animateValue(document.getElementById('dk-total'), totalViews);
   if (todayDelta > 0) animateValue(document.getElementById('dk-today'), todayDelta, '+'); else document.getElementById('dk-today').textContent = '—';
@@ -2836,7 +2853,14 @@ async function loadDashboard() {
     // Exclusion des pics PAR VIDEO (comme la page Statistiques) : on ecarte une video
     // dont le compteur bondit de plus de SPIKE_THRESHOLD en un jour, sans masquer le
     // jour entier.
-    for (const vid in cur) { if (vid in prv) { const g = cur[vid] - prv[vid]; if (g > 0 && g <= SPIKE_THRESHOLD) delta += g; } }
+    for (const vid in cur) {
+      if (vid in prv) {
+        const imp = videoAddedDate[vid];
+        if (imp && imp >= dates[i - 1]) continue; // video importee : pas comptee le jour d'import (+ tampon)
+        const g = cur[vid] - prv[vid];
+        if (g > 0 && g <= SPIKE_THRESHOLD) delta += g;
+      }
+    }
     raw.push({ d: dates[i], v: delta });
   }
   const labels = raw.map(r => fmtDate(r.d).slice(0, 5));

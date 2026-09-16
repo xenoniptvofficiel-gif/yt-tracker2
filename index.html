@@ -954,6 +954,24 @@ async function sbGet(table, params='') {
   });
   return r.json();
 }
+// Comme sbGet mais PAGINÉ : PostgREST plafonne chaque requête à 1000 lignes.
+// Indispensable pour la table `videos` qui dépasse 1000 lignes (sinon les vidéos
+// les plus anciennes — souvent les plus vues — sont ignorées : "Vues totales" faux).
+async function sbGetAll(table, params='') {
+  const out = []; let offset = 0; const pageSize = 1000;
+  while (true) {
+    const sep = params ? '&' : '';
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${params}${sep}limit=${pageSize}&offset=${offset}`, {
+      headers: { apikey:SUPABASE_KEY, Authorization:`Bearer ${SUPABASE_KEY}` }
+    });
+    const batch = await r.json();
+    if (!Array.isArray(batch) || batch.length === 0) break;
+    out.push(...batch);
+    if (batch.length < pageSize) break;
+    offset += pageSize;
+  }
+  return out;
+}
 async function sbPost(table, body) {
   const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
     method:'POST',
@@ -1443,7 +1461,7 @@ function buildPageRange(current, total) {
 
 // ─── LOAD VIDEOS ─────────────────────────────────────────────────────────────
 async function loadVideos() {
-  const videos = await sbGet('videos', 'order=added_at.desc');
+  const videos = await sbGetAll('videos', 'order=added_at.desc');
   allVideos = videos || [];
   // Registre des dates d'import : sert a NE PAS compter les vues d'une video le jour
   // de son import (et le lendemain, tampon anti-snapshot-partiel). On snapshot sa vue
@@ -1959,7 +1977,7 @@ async function loadStats(dateStr) {
   const [dayStats, prevStats, videos] = await Promise.all([
     sbGet('stats_history', `recorded_at=eq.${selectedDate}`),
     sbGet('stats_history', `recorded_at=eq.${prev}`),
-    sbGet('videos', 'order=added_at.desc')
+    sbGetAll('videos', 'order=added_at.desc')
   ]);
   const dm={}, pm={};
   dayStats.forEach(s=>dm[s.video_id]=s.view_count);
@@ -2196,7 +2214,7 @@ async function loadStatusPanel() {
   document.getElementById('status-list-container').innerHTML = '<div class="loading"><div class="spinner"></div> Chargement...</div>';
   
   // Reload videos from DB to get latest deleted_at
-  const videos = await sbGet('videos', 'order=deleted_at.desc.nullslast,added_at.desc');
+  const videos = await sbGetAll('videos', 'order=deleted_at.desc.nullslast,added_at.desc');
   statusVideosCache = videos || [];
   
   // Update deleted_at for newly deleted videos that don't have it yet

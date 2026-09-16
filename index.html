@@ -1494,8 +1494,8 @@ async function loadVideos() {
   const today = todayFR();
   const yesterday = prevDay(today);
   const [ts, ys] = await Promise.all([
-    sbGet('stats_history', `select=video_id,view_count&recorded_at=eq.${today}&limit=1000`),
-    sbGet('stats_history', `select=video_id,view_count&recorded_at=eq.${yesterday}&limit=1000`)
+    sbGetAll('stats_history', `select=video_id,view_count&recorded_at=eq.${today}`),
+    sbGetAll('stats_history', `select=video_id,view_count&recorded_at=eq.${yesterday}`)
   ]);
   statsCache[today] = {}; ts.forEach(s => statsCache[today][s.video_id] = s.view_count);
   statsCache[yesterday] = {}; ys.forEach(s => statsCache[yesterday][s.video_id] = s.view_count);
@@ -1975,8 +1975,8 @@ async function loadStats(dateStr) {
 
   const prev = prevDay(selectedDate);
   const [dayStats, prevStats, videos] = await Promise.all([
-    sbGet('stats_history', `recorded_at=eq.${selectedDate}`),
-    sbGet('stats_history', `recorded_at=eq.${prev}`),
+    sbGetAll('stats_history', `recorded_at=eq.${selectedDate}`),
+    sbGetAll('stats_history', `recorded_at=eq.${prev}`),
     sbGetAll('videos', 'order=added_at.desc')
   ]);
   const dm={}, pm={};
@@ -2084,7 +2084,7 @@ let calMonth = new Date().getMonth(); // 0-based
 let statsAvailableDates = new Set();
 
 async function buildHistoryNav() {
-  const all = await sbGet('stats_history', 'select=recorded_at&order=recorded_at.desc');
+  const all = await sbGetAll('stats_history', 'select=recorded_at&order=recorded_at.desc');
   const unique = [...new Set(all.map(r=>r.recorded_at))];
   statsAvailableDates = new Set(unique);
 

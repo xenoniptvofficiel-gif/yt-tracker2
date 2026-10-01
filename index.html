@@ -1708,9 +1708,11 @@ async function startImport() {
   document.getElementById('importDoneBtn').style.display = 'inline-block';
 }
 
-function finishImport() {
+async function finishImport() {
   closeImport();
-  loadVideos();
+  await loadVideos();            // recharge allVideos + snapshot du jour (incluant les imports)
+  dashLoaded = false;           // force le rechargement du graphe dashboard
+  await loadDashboard();        // recalcule le KPI "nouvelles vues aujourd'hui" + la courbe
 }
 
 // Close modal on overlay click
@@ -1744,6 +1746,7 @@ async function addVideo() {
     toast(`✓ "${info.title}" ajoutée !`, 'success');
     input.value='';
     await loadVideos();
+    dashLoaded = false; await loadDashboard(); // rafraîchit le dashboard après ajout (évite le "0" transitoire)
   } else {
     toast("Erreur lors de l'ajout",'error');
   }
@@ -2519,51 +2522,46 @@ async function loadAnalytics() {
 }
 
 async function reloadStatsCache() {
-  // Chargement complet, paginé et PARALLÈLE, avec erreurs remontées à l'écran
-  const pageSize = 1000;
-  const hdrs = { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`, Prefer: 'count=exact' };
-
-  // 1. Première page + nombre total exact de lignes
-  const r0 = await fetch(`${SUPABASE_URL}/rest/v1/stats_history?select=video_id,view_count,recorded_at&order=recorded_at.asc,video_id.asc&limit=${pageSize}&offset=0`, { headers: hdrs });
-  if (!r0.ok) throw new Error(`Supabase HTTP ${r0.status} — ${(await r0.text()).slice(0,200)}`);
-  const first = await r0.json();
-  const range = r0.headers.get('content-range') || '';           // ex: "0-999/91234"
-  const totalRows = parseInt(range.split('/')[1]) || first.length;
-  console.log(`[stats] total lignes: ${totalRows}`);
-
-  // 2. Pages restantes en parallèle (par vagues de 8 pour ne pas saturer)
-  const pages = [first];
-  const offsets = [];
-  for (let o = pageSize; o < totalRows; o += pageSize) offsets.push(o);
-  for (let i = 0; i < offsets.length; i += 8) {
-    const wave = offsets.slice(i, i + 8);
-    const results = await Promise.all(wave.map(async (o) => {
-      const r = await fetch(`${SUPABASE_URL}/rest/v1/stats_history?select=video_id,view_count,recorded_at&order=recorded_at.asc,video_id.asc&limit=${pageSize}&offset=${o}`, {
-        headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` }
-      });
-      if (!r.ok) throw new Error(`Supabase HTTP ${r.status} (offset ${o})`);
-      return r.json();
-    }));
-    pages.push(...results);
+  // Chargement PAR DATE sur une fenêtre glissante (couvre 7j/14j/30j/3mois).
+  // Chaque requête filtre recorded_at=eq.<date> (≈800 lignes, une seule page) :
+  // plus d'offset profond ni de tri global sur ~150k lignes → plus de timeout
+  // Supabase (HTTP 500) qui cassait la page quand l'historique grossit. Le coût
+  // ne dépend plus de la taille totale de l'historique (toujours ~100 requêtes).
+  const WINDOW_DAYS = 100;
+  const dates = [];
+  for (let i = 0; i < WINDOW_DAYS; i++) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    dates.push(d.toLocaleDateString('fr-CA', { timeZone: 'Europe/Paris' }));
   }
 
-  // 3. Construction du cache
   statsCache = {};
   const dateSet = new Set();
   let loaded = 0;
-  for (const batch of pages) {
-    for (const s of batch) {
-      if (!statsCache[s.recorded_at]) statsCache[s.recorded_at] = {};
-      statsCache[s.recorded_at][s.video_id] = s.view_count;
-      dateSet.add(s.recorded_at);
-      loaded++;
+  // vagues de 8 requêtes en parallèle
+  for (let i = 0; i < dates.length; i += 8) {
+    const wave = dates.slice(i, i + 8);
+    const results = await Promise.all(wave.map(async (dt) => {
+      const r = await fetch(`${SUPABASE_URL}/rest/v1/stats_history?select=video_id,view_count&recorded_at=eq.${dt}&limit=3000`, {
+        headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` }
+      });
+      if (!r.ok) throw new Error(`Supabase HTTP ${r.status} (${dt})`);
+      return { dt, rows: await r.json() };
+    }));
+    for (const { dt, rows } of results) {
+      if (rows && rows.length) {
+        statsCache[dt] = {};
+        for (const s of rows) { statsCache[dt][s.video_id] = s.view_count; loaded++; }
+        dateSet.add(dt);
+      }
     }
   }
-  allHistoryDates = [...dateSet].sort((a,b) => b.localeCompare(a));
-  console.log(`[stats] chargé: ${loaded}/${totalRows} lignes, ${allHistoryDates.length} dates`);
+
+  allHistoryDates = [...dateSet].sort((a, b) => b.localeCompare(a));
+  console.log(`[stats] chargé (fenêtre ${WINDOW_DAYS}j): ${loaded} lignes, ${allHistoryDates.length} dates`);
 
   if (allHistoryDates.length < 2) {
-    throw new Error(`Données insuffisantes: ${loaded} lignes / ${allHistoryDates.length} dates chargées (attendu: >100 dates)`);
+    throw new Error(`Données insuffisantes: ${loaded} lignes / ${allHistoryDates.length} dates chargées`);
   }
 }
 
